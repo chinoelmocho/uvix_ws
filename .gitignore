@@ -1,0 +1,11 @@
+# IDE
+.vscode/
+
+# colcon build artifacts (regenerados con `colcon build`)
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.pyc
