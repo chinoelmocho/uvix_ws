@@ -1,0 +1,35 @@
+patrol_node:
+  ros__parameters:
+    use_sim_time: true
+    global_frame: map
+    robot_frame: base_footprint
+
+    cell_size: 2.0
+    visit_radius: 10.0
+    min_free_ratio: 0.3
+    max_goal_cost: 80
+    candidates_per_try: 5
+    max_failures: 2
+    dwell_time: 0.5
+    goal_timeout: 180.0
+
+    stuck_time: 5.0
+    stuck_radius: 0.15
+    backup_dist: 0.30
+    backup_speed: 0.10
+    escape_min_dist: 0.8
+    escape_max_dist: 2.0
+    escape_max_cost: 40
+    escape_timeout: 25.0
+    max_escapes: 3
+
+    near_goal_dist: 2.0
+    near_goal_timeout: 10.0
+    near_detour_ratio: 2.0
+
+    exclusion_names: ["rampa", "ascensores", "Desniveles1", "Desniveles2"]
+    exclusion_zones: [-2.94, 14.65, -0.48, 17.09,
+                      -2.30, 18.70,  2.30, 21.50,
+                       6.00, 17.00, 13.00, 21.00,
+                      -6.00, 17.00, -13.00, 21.00]
+    exclusion_margin: 0.5
