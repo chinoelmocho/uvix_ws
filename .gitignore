@@ -4,6 +4,7 @@
 # colcon build artifacts (regenerados con `colcon build`)
 build/
 install/
+images/
 log/
 
 # Python
