@@ -27,9 +27,9 @@ uvix_base_controller:
     linear:
       x:
         has_velocity_limits: true
-        max_velocity: 2.0
+        max_velocity: 4.0
         has_acceleration_limits: true
-        max_acceleration: 4.0
+        max_acceleration: 2.0
         has_jerk_limits: false
     angular:
       z:

@@ -105,7 +105,7 @@ def generate_launch_description():
     pkg_share = get_package_share_directory('Uvix_sim')
 
     world_file  = PythonExpression([
-        "'", os.path.join(pkg_share, 'worlds', 'hospital.world'), "' if '",
+        "'", os.path.join(pkg_share, 'worlds', 'hospital2.world'), "' if '",
         LaunchConfiguration('muebles'), "' == 'true' else '",
         os.path.join(pkg_share, 'worlds', 'hospital_empty.world'), "'",
     ])
