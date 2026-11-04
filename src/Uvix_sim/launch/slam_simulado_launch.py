@@ -5,23 +5,14 @@ from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
-# ARCHIVO SOLO DE SLAM
+# SLAM + NAV2
 
 def generate_launch_description():
 
-    ruta_slam_params = os.path.join(
-        get_package_share_directory('Uvix_sim'),
-        'config',
-        'slam_params.yaml'
-    )
-    ruta_nav_params = os.path.join(
-        get_package_share_directory('Uvix_sim'),
-        'config',
-        'nav2_params.yaml'
-    )
+    pkg_uvix = get_package_share_directory('Uvix_sim')
 
-    pkg_nav2 = get_package_share_directory('nav2_bringup')
-
+    ruta_slam_params = os.path.join(pkg_uvix, 'config', 'slam_params.yaml')
+    ruta_nav_params  = os.path.join(pkg_uvix, 'config', 'nav2_params.yaml')
 
     slam_node = Node(
         package='slam_toolbox',
@@ -33,9 +24,10 @@ def generate_launch_description():
         ],
         output='screen'
     )
+
     nav2 = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(pkg_nav2, 'launch', 'navigation_launch.py')),
+            os.path.join(pkg_uvix, 'launch', 'uvix_navigation_launch.py')),   # ← tu copia
         launch_arguments={
             'use_sim_time': 'True',
             'params_file': ruta_nav_params,

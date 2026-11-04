@@ -2,10 +2,10 @@ twist_mux:
   ros__parameters:
     topics:
       navigation:
-        topic: cmd_vel_nav
+        topic: cmd_vel_nav_out   # salida final de Nav2 (smoother + behaviors)
         timeout: 0.5
         priority: 10
       app:
-        topic: cmd_vel
+        topic: cmd_vel           # la app del móvil
         timeout: 0.5
-        priority: 100     # la app del móvil manda sobre Nav2
+        priority: 100            # la app manda sobre Nav2
