@@ -10,3 +10,5 @@ log/
 # Python
 __pycache__/
 *.pyc
+src/Uvix_sim/maps/*.posegraph
+src/Uvix_sim/maps/*.data
