@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+
+<library path="uvix_hadware">
+
+  <class
+    name="uvix_hadware/UvixSystem"
+    type="uvix_hardware::UvixSystem"
+    base_class_type="hardware_interface::SystemInterface">
+
+    <description>
+      Sistema de hardware simulado para UVIX.
+    </description>
+
+  </class>
+
+</library>
