@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "ms-vscode-remote.remote-wsl",
+    "ms-python.python",
+    "ms-vscode.cpptools",
+    "ms-vscode.cmake-tools",
+    "redhat.vscode-yaml",
+    "redhat.vscode-xml",
+    "eamodio.gitlens"
+  ]
+}
