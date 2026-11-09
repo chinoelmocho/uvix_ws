@@ -1,0 +1,45 @@
+{
+  "version": "2.0.0",
+  "options": {
+    "cwd": "${workspaceFolder}",
+    "shell": { "executable": "/bin/bash", "args": ["-c"] }
+  },
+  "tasks": [
+    {
+      "label": "colcon: build",
+      "type": "shell",
+      "command": "source /opt/ros/humble/setup.bash && colcon build --symlink-install --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && mergecc() { jq -s 'add' build/*/compile_commands.json > build/compile_commands.json; }; command -v jq >/dev/null && mergecc || true",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "colcon: build paquete",
+      "type": "shell",
+      "command": "source /opt/ros/humble/setup.bash && colcon build --symlink-install --packages-select ${input:paquete}",
+      "group": "build",
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "colcon: clean",
+      "type": "shell",
+      "command": "rm -rf build install log",
+      "problemMatcher": []
+    },
+    {
+      "label": "sim: lanzar simulación",
+      "type": "shell",
+      "command": "source install/setup.bash && ros2 launch Uvix_sim sim_launch.py",
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "paquete",
+      "type": "pickString",
+      "description": "Paquete a compilar",
+      "options": ["Uvix_sim", "uvix_description", "uvix_hadware", "joy_bridge", "explore_lite", "bobert_sim"],
+      "default": "Uvix_sim"
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+    // --- Python (ROS 2 Humble) ---
+    "python.analysis.extraPaths": [
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages",
+        "${workspaceFolder}/install/Uvix_sim/lib/python3.10/site-packages",
+        "${workspaceFolder}/install/joy_bridge/lib/python3.10/site-packages",
+        "${workspaceFolder}/install/bobert_sim/lib/python3.10/site-packages"
+    ],
+    "python.autoComplete.extraPaths": [
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ],
+
+    // --- C++: colcon compila, CMake Tools no debe configurar por su cuenta ---
+    "cmake.configureOnOpen": false,
+    "cmake.automaticReconfigure": false,
+
+    // --- Tipos de archivo de ROS ---
+    "files.associations": {
+        "*.xacro": "xml",
+        "*.urdf": "xml",
+        "*.gazebo": "xml",
+        "*.world": "xml",
+        "*.sdf": "xml",
+        "*.launch": "xml",
+        "*.rviz": "yaml"
+    },
+
+    // --- Que el explorador y la búsqueda ignoren lo generado ---
+    "files.exclude": {
+        "**/__pycache__": true
+    },
+    "search.exclude": {
+        "build/": true,
+        "install/": true,
+        "log/": true,
+        "**/maps/*.posegraph": true,
+        "**/maps/*.data": true
+    },
+    "files.watcherExclude": {
+        "**/build/**": true,
+        "**/install/**": true,
+        "**/log/**": true
+    },
+
+    // --- Formato ---
+    "files.eol": "\n",
+    "files.insertFinalNewline": true,
+    "files.trimTrailingWhitespace": true,
+    "[python]": { "editor.tabSize": 4 },
+    "[cpp]": { "editor.tabSize": 2 },
+    "[xml]": { "editor.tabSize": 2 },
+    "[yaml]": { "editor.tabSize": 2 }
+}

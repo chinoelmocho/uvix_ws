@@ -42,7 +42,7 @@ PROCESOS_SIM = [
     'robot_state_publisher',
     'spawn_entity.py',
     'controller_manager/spawner',
-    'topic_tools/relay',
+    'twist_mux',
     'robot_localization/ekf_node',
     'lib/Uvix_sim/',
     'lib/nav2_',
@@ -103,9 +103,10 @@ def al_terminar_bien(proceso, mensaje, acciones):
 
 def generate_launch_description():
     pkg_share = get_package_share_directory('Uvix_sim')
+    twist_mux_config = os.path.join(pkg_share, 'config', 'twist_mux.yaml')
 
     world_file  = PythonExpression([
-        "'", os.path.join(pkg_share, 'worlds', 'hospital.world'), "' if '",
+        "'", os.path.join(pkg_share, 'worlds', 'hospital2.world'), "' if '",
         LaunchConfiguration('muebles'), "' == 'true' else '",
         os.path.join(pkg_share, 'worlds', 'hospital_empty.world'), "'",
     ])
@@ -228,12 +229,12 @@ def generate_launch_description():
         output='screen',
     )
 
-    cmd_vel_relay = Node(
-        package='topic_tools',
-        executable='relay',
-        name='cmd_vel_relay',
-        arguments=['/cmd_vel', '/uvix_base_controller/cmd_vel_unstamped'],
-        parameters=[sim_params],
+    twist_mux = Node(
+        package='twist_mux',
+        executable='twist_mux',
+        name='twist_mux',
+        parameters=[twist_mux_config, sim_params],
+        remappings=[('cmd_vel_out', '/uvix_base_controller/cmd_vel_unstamped')],
         output='screen',
     )
 
@@ -292,7 +293,7 @@ def generate_launch_description():
         diff_drive_spawner,
         '[sim_launch] Diff drive activo → relay, EKF y range_fix',
         [
-            cmd_vel_relay,
+            twist_mux,
             ekf_node,
             range_fix,
             LogInfo(msg=['[sim_launch] RViz abrirá en ', LaunchConfiguration('rviz_delay'), ' s'],

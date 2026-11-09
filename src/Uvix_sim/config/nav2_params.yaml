@@ -245,8 +245,8 @@ local_costmap:
           max_obstacle_height: 1.76
           marking: False
           clearing: True
-          raytrace_min_range: 0.10
-          raytrace_max_range: 3.5
+          raytrace_min_range: 0.2
+          raytrace_max_range: 15.0
         scan:
           topic: /scan
           max_obstacle_height: 2.0
@@ -267,7 +267,7 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_footprint
       use_sim_time: True
-      footprint: "[[0.32, 0.31], [0.32, -0.31], [-0.32, -0.31], [-0.32, 0.31]]"
+      footprint: "[[0.29, 0.29], [0.29, -0.29], [-0.29, -0.29], [-0.29, 0.29]]"
       footprint_padding: 0.0
       resolution: 0.05
       track_unknown_space: true
