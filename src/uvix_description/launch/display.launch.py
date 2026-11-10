@@ -4,7 +4,7 @@ from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
 from launch.substitutions import (
-    Command,    
+    Command,
     PathJoinSubstitution,
 )
 
@@ -16,7 +16,6 @@ def generate_launch_description():
 
     package_dir = get_package_share_directory("uvix_description")
 
-    # El nombre del Xacro se indicará al ejecutar el launch.
     xacro_file = os.path.join(
         package_dir,
         "urdf",
@@ -37,7 +36,6 @@ def generate_launch_description():
 
     return LaunchDescription([
 
-        # Publica la descripción del robot y sus transformaciones.
         Node(
             package="robot_state_publisher",
             executable="robot_state_publisher",
@@ -47,8 +45,6 @@ def generate_launch_description():
             }],
             output="screen",
         ),
-
-        # Carga tu plugin y ejecuta el ciclo de control.
         Node(
             package="controller_manager",
             executable="ros2_control_node",
@@ -61,8 +57,6 @@ def generate_launch_description():
             ],
             output="screen",
         ),
-
-        # Un spawner puede cargar y activar los dos controladores.
         Node(
             package="controller_manager",
             executable="spawner",
@@ -74,8 +68,6 @@ def generate_launch_description():
             ],
             output="screen",
         ),
-
-        # Visualización.
         Node(
             package="rviz2",
             executable="rviz2",

@@ -1,17 +1,3 @@
-#!/usr/bin/env python3
-"""
-slam_toolbox (mapeo o localización) sobre una simulación ya abierta.
-
-  ros2 launch uvix_sim slam_launch.py                                  # mapa nuevo
-  ros2 launch uvix_sim slam_launch.py map:=PASILLO                     # ampliar mapa
-  ros2 launch uvix_sim slam_launch.py mode:=localization map:=PASILLO  # solo localizar
-  ros2 launch uvix_sim slam_launch.py mode:=localization map:=PASILLO start_pose:="x y yaw"
-
-Guardar el mapa:
-  ros2 run nav2_map_server map_saver_cli -f ~/uvix_ws/src/uvix_sim/maps/<nombre>
-  ros2 service call /slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph \
-      "{filename: '/home/chino/uvix_ws/src/uvix_sim/maps/<nombre>'}"
-"""
 
 import os
 

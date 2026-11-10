@@ -1,14 +1,3 @@
-#!/usr/bin/env python3
-"""
-Simulación de Uvix en Gazebo + RViz.
-
-  ros2 launch uvix_sim sim_launch.py [render:=gpu|cpu] [gui:=true|false] [muebles:=true|false]
-                                     [rviz:=true|false] [rviz_delay:=5.0] [rviz_render:=gpu|cpu]
-
-Orden de arranque: limpieza → Gazebo → spawn → joint_state_broadcaster → diff drive
-→ relay /cmd_vel + EKF + range_fix → RViz.
-"""
-
 import os
 import subprocess
 import time
