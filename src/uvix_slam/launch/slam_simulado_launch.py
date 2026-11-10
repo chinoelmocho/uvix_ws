@@ -9,10 +9,11 @@ from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
 
-    pkg_uvix = get_package_share_directory('Uvix_sim')
+    pkg_uvix_slam = get_package_share_directory('uvix_slam')
+    pkg_uvix_nav = get_package_share_directory('uvix_nav')
 
-    ruta_slam_params = os.path.join(pkg_uvix, 'config', 'slam_params.yaml')
-    ruta_nav_params  = os.path.join(pkg_uvix, 'config', 'nav2_params.yaml')
+    ruta_slam_params = os.path.join(pkg_uvix_slam, 'config', 'slam_params.yaml')
+    ruta_nav_params  = os.path.join(pkg_uvix_nav, 'config', 'nav2_params.yaml')
 
     slam_node = Node(
         package='slam_toolbox',
@@ -27,7 +28,7 @@ def generate_launch_description():
 
     nav2 = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(pkg_uvix, 'launch', 'uvix_navigation_launch.py')),   # ← tu copia
+            os.path.join(pkg_uvix_nav, 'launch', 'uvix_navigation_launch.py')),   # ← tu copia
         launch_arguments={
             'use_sim_time': 'True',
             'params_file': ruta_nav_params,
