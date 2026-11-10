@@ -3,7 +3,7 @@
     "python.analysis.extraPaths": [
         "/opt/ros/humble/lib/python3.10/site-packages",
         "/opt/ros/humble/local/lib/python3.10/dist-packages",
-        "${workspaceFolder}/install/Uvix_sim/lib/python3.10/site-packages",
+        "${workspaceFolder}/install/uvix_sim/lib/python3.10/site-packages",
         "${workspaceFolder}/install/joy_bridge/lib/python3.10/site-packages",
         "${workspaceFolder}/install/bobert_sim/lib/python3.10/site-packages"
     ],

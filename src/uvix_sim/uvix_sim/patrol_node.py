@@ -6,8 +6,8 @@ Divide /map en celdas, va a la celda no visitada con ruta más corta, espera
 dwell_time y repite en rondas infinitas. Incluye anti-atasco (retroceso + punto
 de escape) y omite goals cercanos inalcanzables. Publica /patrol/markers.
 
-  ros2 run Uvix_sim patrol_node --ros-args \
-      --params-file ~/uvix_ws/install/Uvix_sim/share/Uvix_sim/config/patrol_params.yaml
+  ros2 run uvix_sim patrol_node --ros-args \
+      --params-file ~/uvix_ws/install/uvix_sim/share/uvix_sim/config/patrol_params.yaml
 """
 
 import math

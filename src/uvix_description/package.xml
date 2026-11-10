@@ -11,7 +11,7 @@
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
-  <exec_depend>Uvix_sim</exec_depend>
+  <exec_depend>uvix_sim</exec_depend>
   <exec_depend>uvix_hadware</exec_depend>
   
   <export>
