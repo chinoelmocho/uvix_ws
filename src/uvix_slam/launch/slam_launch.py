@@ -2,15 +2,15 @@
 """
 slam_toolbox (mapeo o localización) sobre una simulación ya abierta.
 
-  ros2 launch Uvix_sim slam_launch.py                                  # mapa nuevo
-  ros2 launch Uvix_sim slam_launch.py map:=PASILLO                     # ampliar mapa
-  ros2 launch Uvix_sim slam_launch.py mode:=localization map:=PASILLO  # solo localizar
-  ros2 launch Uvix_sim slam_launch.py mode:=localization map:=PASILLO start_pose:="x y yaw"
+  ros2 launch uvix_sim slam_launch.py                                  # mapa nuevo
+  ros2 launch uvix_sim slam_launch.py map:=PASILLO                     # ampliar mapa
+  ros2 launch uvix_sim slam_launch.py mode:=localization map:=PASILLO  # solo localizar
+  ros2 launch uvix_sim slam_launch.py mode:=localization map:=PASILLO start_pose:="x y yaw"
 
 Guardar el mapa:
-  ros2 run nav2_map_server map_saver_cli -f ~/uvix_ws/src/Uvix_sim/maps/<nombre>
+  ros2 run nav2_map_server map_saver_cli -f ~/uvix_ws/src/uvix_sim/maps/<nombre>
   ros2 service call /slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph \
-      "{filename: '/home/chino/uvix_ws/src/Uvix_sim/maps/<nombre>'}"
+      "{filename: '/home/chino/uvix_ws/src/uvix_sim/maps/<nombre>'}"
 """
 
 import os
@@ -24,7 +24,7 @@ from launch.event_handlers import OnProcessExit
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
-MAPS_DIR = os.path.expanduser('~/uvix_ws/src/Uvix_sim/maps')
+MAPS_DIR = os.path.expanduser('~/uvix_ws/src/uvix_sim/maps')
 
 
 def resolve_map(name):
@@ -59,7 +59,7 @@ def launch_setup(context):
             overrides['map_start_at_dock'] = True
 
     prereq_checker = Node(
-        package='Uvix_sim',
+        package='uvix_sim',
         executable='slam_prereq_checker',
         name='slam_prereq_checker',
         output='screen',
@@ -95,7 +95,7 @@ def launch_setup(context):
 
 def generate_launch_description():
 
-    pkg_share = get_package_share_directory('Uvix_sim')
+    pkg_share = get_package_share_directory('uvix_sim')
     default_slam_params = os.path.join(pkg_share, 'config', 'slam_params.yaml')
 
     declare_slam_params = DeclareLaunchArgument(

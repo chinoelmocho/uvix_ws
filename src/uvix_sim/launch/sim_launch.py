@@ -2,7 +2,7 @@
 """
 Simulación de Uvix en Gazebo + RViz.
 
-  ros2 launch Uvix_sim sim_launch.py [render:=gpu|cpu] [gui:=true|false] [muebles:=true|false]
+  ros2 launch uvix_sim sim_launch.py [render:=gpu|cpu] [gui:=true|false] [muebles:=true|false]
                                      [rviz:=true|false] [rviz_delay:=5.0] [rviz_render:=gpu|cpu]
 
 Orden de arranque: limpieza → Gazebo → spawn → joint_state_broadcaster → diff drive
@@ -44,7 +44,7 @@ PROCESOS_SIM = [
     'controller_manager/spawner',
     'twist_mux',
     'robot_localization/ekf_node',
-    'lib/Uvix_sim/',
+    'lib/uvix_sim/',
     'lib/nav2_',
     'slam_toolbox',
 ]
@@ -54,7 +54,7 @@ def pids_de_la_sim():
     """PIDs de procesos de la simulación vivos ahora, sin contar este launch."""
     propios = {os.getpid(), os.getppid()}
     pids = set()
-    for patron in ['ros2 launch Uvix_sim', *PROCESOS_SIM]:
+    for patron in ['ros2 launch uvix_sim', *PROCESOS_SIM]:
         r = subprocess.run(['pgrep', '-f', patron], capture_output=True, text=True)
         pids.update(int(p) for p in r.stdout.split())
     return sorted(pids - propios)
@@ -102,7 +102,7 @@ def al_terminar_bien(proceso, mensaje, acciones):
 
 
 def generate_launch_description():
-    pkg_share = get_package_share_directory('Uvix_sim')
+    pkg_share = get_package_share_directory('uvix_sim')
     twist_mux_config = os.path.join(pkg_share, 'config', 'twist_mux.yaml')
 
     world_file  = PythonExpression([
@@ -184,7 +184,7 @@ def generate_launch_description():
     )
 
     gazebo_ready_watcher = Node(
-        package='Uvix_sim',
+        package='uvix_sim',
         executable='gazebo_ready_watcher',
         name='gazebo_ready_watcher',
         output='screen',
@@ -247,7 +247,7 @@ def generate_launch_description():
     )
 
     range_fix = Node(
-        package='Uvix_sim',
+        package='uvix_sim',
         executable='range_fix',
         name='range_fix',
         parameters=[sim_params],

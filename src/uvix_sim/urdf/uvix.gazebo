@@ -110,7 +110,7 @@
 
 <gazebo>
   <plugin name="gazebo_ros2_control" filename="libgazebo_ros2_control.so">
-    <parameters>$(find Uvix_sim)/config/Uvix_controllers.yaml</parameters>
+    <parameters>$(find uvix_sim)/config/Uvix_controllers.yaml</parameters>
     <ros>
       <use_sim_time>true</use_sim_time>
     </ros>

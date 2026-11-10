@@ -2,7 +2,7 @@ import os
 from glob import glob
 from setuptools import find_packages, setup
 
-package_name = 'Uvix_sim'
+package_name = 'uvix_sim'
 
 data_files = [
     ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
@@ -37,11 +37,11 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'gazebo_ready_watcher = Uvix_sim.gazebo_ready_watcher:main',
-            'slam_prereq_checker = Uvix_sim.slam_prereq_checker:main',
-            'patrol_node = Uvix_sim.patrol_node:main',
-            'range_fix = Uvix_sim.range_fix:main',
-            'slam_points_node = Uvix_sim.slam_points_node:main',
+            'gazebo_ready_watcher = uvix_sim.gazebo_ready_watcher:main',
+            'slam_prereq_checker = uvix_sim.slam_prereq_checker:main',
+            'patrol_node = uvix_sim.patrol_node:main',
+            'range_fix = uvix_sim.range_fix:main',
+            'slam_points_node = uvix_sim.slam_points_node:main',
         ],
     },
 )

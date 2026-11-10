@@ -1,8 +1,8 @@
 <?xml version="1.0" ?>
 <robot name="uvix" xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-    <xacro:include filename="$(find Uvix_sim)/urdf/materials.xacro" />
-    <xacro:include filename="$(find Uvix_sim)/urdf/uvix.gazebo" />
+    <xacro:include filename="$(find uvix_sim)/urdf/materials.xacro" />
+    <xacro:include filename="$(find uvix_sim)/urdf/uvix.gazebo" />
 
 
     <link name="base_link">
@@ -16,13 +16,13 @@
         <visual name="base_link_visual">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/base_link.dae" scale="1 1 1" />
+                <mesh filename="package://uvix_sim/meshes/base_link.dae" scale="1 1 1" />
             </geometry>
         </visual>
         <collision name="base_link_collision">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/base_link.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/base_link.stl" scale="0.001 0.001 0.001" />
             </geometry>
         </collision>
     </link>
@@ -40,7 +40,7 @@
         <visual name="wheel_right_visual">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/Rueda_derecha.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/Rueda_derecha.stl" scale="0.001 0.001 0.001" />
             </geometry>
             <material name="verde_rueda_derecha">
                 <color rgba="0.000 1.000 0.000 1.000" />
@@ -49,7 +49,7 @@
         <collision name="wheel_right_collision">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/Rueda_derecha.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/Rueda_derecha.stl" scale="0.001 0.001 0.001" />
             </geometry>
         </collision>
     </link>
@@ -65,7 +65,7 @@
         <visual name="wheel_left_visual">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/Rueda_izquierda.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/Rueda_izquierda.stl" scale="0.001 0.001 0.001" />
             </geometry>
             <material name="rojo_rueda_izquierda">
                 <color rgba="1.000 0.000 0.000 1.000" />
@@ -74,7 +74,7 @@
         <collision name="wheel_left_collision">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/Rueda_izquierda.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/Rueda_izquierda.stl" scale="0.001 0.001 0.001" />
             </geometry>
         </collision>
     </link>
@@ -90,7 +90,7 @@
         <visual name="rear_caster_right_visual">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/Caster_road.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/Caster_road.stl" scale="0.001 0.001 0.001" />
             </geometry>
             <material name="amarillo_caster">
                 <color rgba="1.000 1.000 0.000 1.000" />
@@ -99,7 +99,7 @@
         <collision name="rear_caster_right_collision">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/Caster_road.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/Caster_road.stl" scale="0.001 0.001 0.001" />
             </geometry>
         </collision>
     </link>
@@ -114,7 +114,7 @@
         <visual name="rear_caster_left_visual">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/Caster_road.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/Caster_road.stl" scale="0.001 0.001 0.001" />
             </geometry>
             <material name="amarillo_caster">
                 <color rgba="1.000 1.000 0.000 1.000" />
@@ -123,7 +123,7 @@
         <collision name="rear_caster_left_collision">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/Caster_road.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/Caster_road.stl" scale="0.001 0.001 0.001" />
             </geometry>
         </collision>
     </link>
@@ -138,7 +138,7 @@
         <visual name="front_caster_right_visual">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/Caster_road.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/Caster_road.stl" scale="0.001 0.001 0.001" />
             </geometry>
             <material name="amarillo_caster">
                 <color rgba="1.000 1.000 0.000 1.000" />
@@ -147,7 +147,7 @@
         <collision name="front_caster_right_collision">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/Caster_road.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/Caster_road.stl" scale="0.001 0.001 0.001" />
             </geometry>
         </collision>
     </link>
@@ -162,7 +162,7 @@
         <visual name="front_caster_left_visual">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/Caster_road.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/Caster_road.stl" scale="0.001 0.001 0.001" />
             </geometry>
             <material name="amarillo_caster">
                 <color rgba="1.000 1.000 0.000 1.000" />
@@ -171,7 +171,7 @@
         <collision name="front_caster_left_collision">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/Caster_road.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/Caster_road.stl" scale="0.001 0.001 0.001" />
             </geometry>
         </collision>
     </link>
@@ -187,7 +187,7 @@
         <visual name="rear_road_right_visual">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/road.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/road.stl" scale="0.001 0.001 0.001" />
             </geometry>
             <material name="magenta_road">
                 <color rgba="1.000 0.000 1.000 1.000" />
@@ -196,7 +196,7 @@
         <collision name="rear_road_right_collision">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/road.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/road.stl" scale="0.001 0.001 0.001" />
             </geometry>
         </collision>
     </link>
@@ -211,7 +211,7 @@
         <visual name="rear_road_left_visual">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/road.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/road.stl" scale="0.001 0.001 0.001" />
             </geometry>
             <material name="magenta_road">
                 <color rgba="1.000 0.000 1.000 1.000" />
@@ -220,7 +220,7 @@
         <collision name="rear_road_left_collision">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/road.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/road.stl" scale="0.001 0.001 0.001" />
             </geometry>
         </collision>
     </link>
@@ -235,7 +235,7 @@
         <visual name="front_road_right_visual">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/road.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/road.stl" scale="0.001 0.001 0.001" />
             </geometry>
             <material name="magenta_road">
                 <color rgba="1.000 0.000 1.000 1.000" />
@@ -244,7 +244,7 @@
         <collision name="front_road_right_collision">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/road.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/road.stl" scale="0.001 0.001 0.001" />
             </geometry>
         </collision>
     </link>
@@ -259,7 +259,7 @@
         <visual name="front_road_left_visual">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/road.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/road.stl" scale="0.001 0.001 0.001" />
             </geometry>
             <material name="magenta_road">
                 <color rgba="1.000 0.000 1.000 1.000" />
@@ -268,7 +268,7 @@
         <collision name="front_road_left_collision">
             <origin xyz="0 0 0" rpy="0 0 0" />
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/road.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/road.stl" scale="0.001 0.001 0.001" />
             </geometry>
         </collision>
     </link>
@@ -375,7 +375,7 @@
         <visual name="lidar_visual">
             <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
             <geometry>
-                <mesh filename="package://Uvix_sim/meshes/lidar.stl" scale="0.001 0.001 0.001" />
+                <mesh filename="package://uvix_sim/meshes/lidar.stl" scale="0.001 0.001 0.001" />
             </geometry>
         </visual>
 

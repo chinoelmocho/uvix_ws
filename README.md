@@ -12,7 +12,7 @@ teleoperación con joystick y la interfaz de hardware `ros2_control` para el rob
 
 | Paquete | Tipo | Descripción |
 |---|---|---|
-| [`Uvix_sim`](src/Uvix_sim) | ament_python | Simulación principal: URDF/xacro, mundos de hospital, controladores, SLAM, Nav2, EKF, twist_mux, patrullaje. |
+| [`uvix_sim`](src/uvix_sim) | ament_python | Simulación principal: URDF/xacro, mundos de hospital, controladores, SLAM, Nav2, EKF, twist_mux, patrullaje. |
 | [`uvix_description`](src/uvix_description) | ament_cmake | Descripción del robot para `ros2_control` con el hardware real (`display.launch.py`). |
 | [`uvix_hadware`](src/uvix_hadware) | ament_cmake (C++) | Plugin `hardware_interface::SystemInterface` (`uvix_hadware/UvixSystem`). Aquí se conectan los drivers/SDKs del robot real. |
 | [`joy_bridge`](src/joy_bridge) | ament_python | Recibe el joystick por UDP (puerto 5005, JSON) y lo publica en `/joy`. |
@@ -22,7 +22,7 @@ teleoperación con joystick y la interfaz de hardware `ros2_control` para el rob
 ```
 uvix_ws/
 ├── src/
-│   ├── Uvix_sim/          # simulación, config, launch, mapas, mundos
+│   ├── uvix_sim/          # simulación, config, launch, mapas, mundos
 │   ├── uvix_description/  # URDF para el robot real + ros2_control
 │   ├── uvix_hadware/      # plugin C++ de hardware
 │   ├── joy_bridge/        # joystick por UDP
@@ -77,7 +77,7 @@ colcon build --symlink-install --packages-skip bobert_sim
 ### 1. Simulación
 
 ```bash
-ros2 launch Uvix_sim sim_launch.py
+ros2 launch uvix_sim sim_launch.py
 ```
 
 | Argumento | Valores | Por defecto | Descripción |
@@ -88,28 +88,28 @@ ros2 launch Uvix_sim sim_launch.py
 | `rviz` | `true` / `false` | `true` | Abrir RViz |
 | `rviz_render` | `gpu` / `cpu` | `gpu` | Render de RViz |
 
-Ejemplo ligero: `ros2 launch Uvix_sim sim_launch.py muebles:=false gui:=false render:=cpu`
+Ejemplo ligero: `ros2 launch uvix_sim sim_launch.py muebles:=false gui:=false render:=cpu`
 
 ### 2. SLAM (con la simulación ya abierta)
 
 ```bash
-ros2 launch Uvix_sim slam_launch.py                                   # mapa nuevo
-ros2 launch Uvix_sim slam_launch.py map:=PASILLO                      # ampliar un mapa
-ros2 launch Uvix_sim slam_launch.py mode:=localization map:=PASILLO   # solo localizarse
+ros2 launch uvix_sim slam_launch.py                                   # mapa nuevo
+ros2 launch uvix_sim slam_launch.py map:=PASILLO                      # ampliar un mapa
+ros2 launch uvix_sim slam_launch.py mode:=localization map:=PASILLO   # solo localizarse
 ```
 
 Guardar el mapa (imagen `.pgm/.yaml` + pose graph `.posegraph/.data`):
 
 ```bash
-ros2 run nav2_map_server map_saver_cli -f ~/uvix_ws/src/Uvix_sim/maps/<nombre>
+ros2 run nav2_map_server map_saver_cli -f ~/uvix_ws/src/uvix_sim/maps/<nombre>
 ros2 service call /slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph \
-    "{filename: '$HOME/uvix_ws/src/Uvix_sim/maps/<nombre>'}"
+    "{filename: '$HOME/uvix_ws/src/uvix_sim/maps/<nombre>'}"
 ```
 
 ### 3. SLAM + Nav2
 
 ```bash
-ros2 launch Uvix_sim slam_simulado_launch.py
+ros2 launch uvix_sim slam_simulado_launch.py
 ```
 
 ### 4. Robot real (ros2_control)
@@ -126,10 +126,10 @@ ros2 run joy_bridge joy_udp
 
 Espera paquetes JSON en el puerto UDP **5005** con el formato `{"axes": [...], "buttons": [...]}`.
 
-### Nodos útiles de `Uvix_sim`
+### Nodos útiles de `uvix_sim`
 
 `patrol_node`, `slam_points_node`, `slam_prereq_checker`, `gazebo_ready_watcher`, `range_fix`
-→ `ros2 run Uvix_sim <nodo>`
+→ `ros2 run uvix_sim <nodo>`
 
 ---
 
@@ -141,7 +141,7 @@ de más de 100 MB. En el repositorio solo van `*.pgm` y `*.yaml`.
 Para llevar un mapa completo a la Jetson cópialo aparte:
 
 ```bash
-scp ~/uvix_ws/src/Uvix_sim/maps/<nombre>.* usuario@IP_JETSON:~/uvix_ws/src/Uvix_sim/maps/
+scp ~/uvix_ws/src/uvix_sim/maps/<nombre>.* usuario@IP_JETSON:~/uvix_ws/src/uvix_sim/maps/
 ```
 
 ---
@@ -175,4 +175,4 @@ Abre la carpeta desde WSL (`code ~/uvix_ws`) e instala las extensiones recomenda
 - **colcon: build** (`Ctrl+Shift+B`) — compila todo y genera `compile_commands.json` para IntelliSense de C++.
 - **colcon: build paquete** — compila solo el paquete que elijas.
 - **colcon: clean** — borra `build/`, `install/` y `log/`.
-- **sim: lanzar simulación** — `ros2 launch Uvix_sim sim_launch.py`.
+- **sim: lanzar simulación** — `ros2 launch uvix_sim sim_launch.py`.
