@@ -8,6 +8,7 @@ src/uvix_sim/maps/hospital2.posegraph
 # --- Imágenes locales (las del README sí están en git) ---
 images/
 
+
 # --- VS Code: se comparte la configuración, no la caché ---
 .vscode/*
 !.vscode/settings.json
