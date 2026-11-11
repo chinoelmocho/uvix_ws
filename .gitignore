@@ -5,7 +5,7 @@ log/
 src/uvix_sim/maps/hospital2.data
 src/uvix_sim/maps/hospital2.posegraph
 
-
+VISION.md
 # --- VS Code: se comparte la configuración, no la caché ---
 .vscode/*
 !.vscode/settings.json
