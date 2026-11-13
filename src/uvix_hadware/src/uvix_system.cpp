@@ -61,7 +61,7 @@ public:
     {
         return hardware_interface::SystemInterface::on_init(info);
     }
-    
+
 
 
     hardware_interface::CallbackReturn on_configure(
@@ -69,7 +69,7 @@ public:
     {
         detener_simulacion();
 
-        // Iniciar una nueva configuración desde posición cero.
+
         posicion_izq_ = 0.0;
         posicion_der_ = 0.0;
 
@@ -111,7 +111,7 @@ public:
         const rclcpp::Time &,
         const rclcpp::Duration & period) override
     {
-        // Tiempo transcurrido entre ciclos, expresado en segundos.
+
         const double dt = period.seconds();
 
         if (!std::isfinite(dt) || dt < 0.0)
@@ -133,7 +133,7 @@ public:
             velocidad_der_ = 0.0;
         }
 
-        // Integrar la velocidad para actualizar el ángulo.
+
         posicion_izq_ += velocidad_izq_ * dt;
         posicion_der_ += velocidad_der_ * dt;
 
@@ -144,7 +144,7 @@ public:
         const rclcpp::Time &,
         const rclcpp::Duration &) override
     {
-        // Mientras el sistema esté inactivo, no aplicamos movimiento.
+
         if (!activo_)
         {
             velocidad_aplicada_izq_ = 0.0;
@@ -163,26 +163,26 @@ public:
             return ReturnType::ERROR;
         }
 
-        // Aplicar las órdenes a nuestros motores virtuales.
+
         velocidad_aplicada_izq_ = comando_izq_;
         velocidad_aplicada_der_ = comando_der_;
 
         return ReturnType::OK;
     }
 private:
-    // Estados de la rueda izquierda.
-    double posicion_izq_ = 0.0;   // rad
-    double velocidad_izq_ = 0.0;  // rad/s
 
-    // Estados de la rueda derecha.
-    double posicion_der_ = 0.0;   // rad
-    double velocidad_der_ = 0.0;  // rad/s
+    double posicion_izq_ = 0.0;
+    double velocidad_izq_ = 0.0;
 
-    // Órdenes que escribirá el controlador.
-    double comando_izq_ = 0.0;    // rad/s
-    double comando_der_ = 0.0;    // rad/s
 
-// Últimas velocidades aplicadas a los motores virtuales.
+    double posicion_der_ = 0.0;
+    double velocidad_der_ = 0.0;
+
+
+    double comando_izq_ = 0.0;
+    double comando_der_ = 0.0;
+
+
     double velocidad_aplicada_izq_ = 0.0;
     double velocidad_aplicada_der_ = 0.0;
 
