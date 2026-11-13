@@ -1,4 +1,4 @@
-# UVIX — Robot asistencial para adultos mayores (ROS 2 Humble)
+# UVIX Robot asistencial para adultos mayores (ROS 2 Humble)
 
 UVIX es un robot móvil diferencial pensado para acompañar a adultos mayores en hospitales y
 residencias. Este workspace contiene la simulación en Gazebo, el SLAM, la navegación autónoma con
