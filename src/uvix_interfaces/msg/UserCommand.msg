@@ -1,7 +1,8 @@
 # msg/UserCommand.msg
 std_msgs/Header header
 
-string request_id          # siempre presente
+string request_id          # siempre presente; uno nuevo por cada enunciado
+string parent_request_id   # request_id de la orden que se aclara; vacío si es orden nueva
 string session_id          # vacío si no hay conversación en curso
 string utterance_id        # solo si llegó por voz
 

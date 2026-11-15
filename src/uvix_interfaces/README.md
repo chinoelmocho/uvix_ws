@@ -8,6 +8,9 @@ Este paquete solo define interfaces; la lógica vive en `command_interpreter`,
 > y genera 12 mensajes, 5 servicios y 2 acciones. Las anomalías A1–A5 y B1–B14
 > están resueltas; quedan pendientes las de los diagramas (C1–C7).
 
+> 📄 Catálogo de capacidades, identificadores, requisitos de modelos y evidencia
+> de verificación del hito M1: [`docs/m1_interfaces.md`](../../docs/m1_interfaces.md).
+
 **Contenido**
 
 1. [Idea de funcionamiento](#1-idea-de-funcionamiento)
@@ -112,7 +115,7 @@ Ejemplo: **Juan** (encargado) dice *"Dale las vitaminas a María y a Pedro"*.
 |---|---|---|---|
 | 1 | `UserCommand` | topic | La voz se convierte en texto y se publica con `request_id`, idioma, confianza e identidad del hablante. |
 | 2 | 🧠 `command_interpreter` | nodo | Entiende la orden y arma un `MissionSpec` (`mission_type: dispense_vitamins`, objetivos `María`, `Pedro`). |
-| 2b | `ClarificationRequest` → `SpeakText` | topic → action | Si falta algo (¿qué vitamina?) publica la pregunta y el robot la dice en voz alta. La respuesta del usuario vuelve a entrar como un **nuevo `UserCommand` con el mismo `session_id`**. |
+| 2b | `ClarificationRequest` → `SpeakText` | topic → action | Si falta algo (¿qué vitamina?) publica la pregunta y el robot la dice en voz alta. La respuesta del usuario vuelve a entrar como un **nuevo `UserCommand`** (nuevo `request_id`, mismo `session_id`, `parent_request_id` = orden original). Ver [identificadores](../../docs/m1_interfaces.md#33-respuesta-a-una-aclaración). |
 | 3 | `RegisterMission` | service | El `mission_manager` valida tipo y parámetros, **verifica la identidad** (`GetRequestIdentity`) y el rol (`GetPerson`), **asigna la prioridad** y responde `accepted` + `mission_id`, o un código de rechazo. |
 | 4 | `ExecuteMission` | action | Cuando le toca el turno, la misión se ejecuta con feedback de progreso. Se puede cancelar. |
 | 5 | `MissionStatus` | topic | Estado de la misión: en cola, ejecutando, pausada, parcial, completada… |
@@ -264,6 +267,7 @@ ros2 service call /uvix/register_mission uvix_interfaces/srv/RegisterMission "$(
 ```yaml
 header: {stamp: now, frame_id: ''}
 request_id: req-0001
+parent_request_id: ''       # orden nueva
 session_id: ses-0001
 utterance_id: utt-0001
 modality: 2                 # MODALITY_VOICE
@@ -316,6 +320,7 @@ identity:
 ```yaml
 header: {stamp: now, frame_id: ''}
 request_id: req-0002
+parent_request_id: ''
 session_id: ''
 utterance_id: utt-0002
 modality: 2
