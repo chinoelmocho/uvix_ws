@@ -16,9 +16,9 @@ Este paquete solo define interfaces; la lógica vive en `command_interpreter`,
 4. [Arranque y salud del sistema](#4-arranque-y-salud-del-sistema)
 5. [Baterías y carga](#5-baterías-y-carga)
 6. [Ejemplos YAML](#6-ejemplos-yaml)
-7. [Anomalías encontradas](#7-anomalías-encontradas)
+7. [Anomalías ](#7-anomalías)
 8. [Inventario de interfaces](#8-inventario-de-interfaces)
-9. [Compilar](#9-compilar)
+
 
 ---
 
