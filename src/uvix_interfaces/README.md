@@ -4,9 +4,6 @@ Mensajes, servicios y acciones de ROS 2 del robot social-asistencial **UVIX**.
 Este paquete solo define interfaces; la lógica vive en `command_interpreter`,
 `mission_manager` y el resto de paquetes.
 
-> ✅ **Estado:** el paquete compila (`colcon build --packages-select uvix_interfaces`)
-> y genera 12 mensajes, 5 servicios y 2 acciones. Las anomalías A1–A5 y B1–B14
-> están resueltas; quedan pendientes las de los diagramas (C1–C7).
 
 > 📄 Catálogo de capacidades, identificadores, requisitos de modelos y evidencia
 > de verificación del hito M1: [`docs/m1_interfaces.md`](../../docs/m1_interfaces.md).
