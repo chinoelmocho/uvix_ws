@@ -1,3 +1,5 @@
+# msg/Person.msg
+# Persona registrada. Se consulta con srv/GetPerson.
 string person_id
 string display_name
 

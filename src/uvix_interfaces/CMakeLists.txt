@@ -4,22 +4,42 @@ project(uvix_interfaces)
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
-rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/KeyValue.msg"
-  "msg/UserCommand.msg"
-  "msg/MissionSpec.msg"
-  "msg/ClarificationRequest.msg"
-  "msg/CommandEvent.msg"
-  "srv/RegisterMission.srv"
-  "action/ExecuteMission.action"
-  "action/SpeakText.action"
-  DEPENDENCIES std_msgs builtin_interfaces action_msgs
-)
+
 # find dependencies
 find_package(ament_cmake REQUIRED)
-# uncomment the following section in order to fill in
-# further dependencies manually.
-# find_package(<dependency> REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(builtin_interfaces REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(action_msgs REQUIRED)
+
+rosidl_generate_interfaces(${PROJECT_NAME}
+  # Mensajes
+  "msg/KeyValue.msg"
+  "msg/Person.msg"
+  "msg/UserCommand.msg"
+  "msg/ClarificationRequest.msg"
+  "msg/CommandEvent.msg"
+  "msg/MissionSpec.msg"
+  "msg/MissionStatus.msg"
+  "msg/RobotActivity.msg"
+  "msg/Alert.msg"
+  "msg/SystemStatus.msg"
+  "msg/PowerStatus.msg"
+  "msg/IdentityVerification.msg"
+  # Servicios
+  "srv/RegisterMission.srv"
+  "srv/CancelMission.srv"
+  "srv/AckAlert.srv"
+  "srv/GetPerson.srv"
+  "srv/GetRequestIdentity.srv"
+  # Acciones
+  "action/ExecuteMission.action"
+  "action/SpeakText.action"
+  DEPENDENCIES std_msgs builtin_interfaces sensor_msgs action_msgs
+)
+
+ament_export_dependencies(rosidl_default_runtime)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

@@ -1,0 +1,18 @@
+# srv/CancelMission.srv
+string mission_id
+string request_id          # vincula con IdentityVerification de quien cancela
+string requested_by        # person_id declarado; debe coincidir con el verificado
+string reason
+---
+uint16 CODE_OK=0
+uint16 CODE_MISSION_NOT_FOUND=1
+uint16 CODE_NOT_AUTHORIZED=2       # rol sin permiso (ni STAFF/ADMIN ni quien la pidió)
+uint16 CODE_ALREADY_FINISHED=3
+uint16 CODE_NOT_CANCELABLE=4       # p. ej. emergencia en curso
+uint16 CODE_IDENTITY_NOT_VERIFIED=5
+uint16 CODE_IDENTITY_EXPIRED=6
+uint16 CODE_IDENTITY_MISMATCH=7
+
+bool accepted
+uint16 code
+string message

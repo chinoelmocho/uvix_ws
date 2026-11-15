@@ -4,9 +4,9 @@ Mensajes, servicios y acciones de ROS 2 del robot social-asistencial **UVIX**.
 Este paquete solo define interfaces; la lógica vive en `command_interpreter`,
 `mission_manager` y el resto de paquetes.
 
-> ⚠️ **Estado:** en desarrollo. Los ejemplos de este README usan el diseño
-> objetivo (nombre de paquete `uvix_interfaces`, un solo campo `priority`).
-> Ver [Anomalías](#7-anomalías-encontradas) para lo que aún no compila.
+> ✅ **Estado:** el paquete compila (`colcon build --packages-select uvix_interfaces`)
+> y genera 12 mensajes, 5 servicios y 2 acciones. Las anomalías A1–A5 y B1–B14
+> están resueltas; quedan pendientes las de los diagramas (C1–C7).
 
 **Contenido**
 
@@ -56,6 +56,9 @@ origen sea `ORIGIN_PATIENT`.
 
 ### 1.3 Catálogo de misiones (`MissionSpec.mission_type`)
 
+Cada tipo existe como constante de texto en `MissionSpec` (`TYPE_DANCE = "dance"`, etc.).
+El `mission_manager` rechaza cualquier otro valor con `CODE_UNKNOWN_MISSION_TYPE`.
+
 | `mission_type` | Prioridad | Parámetros (`KeyValue`) | Si falla |
 |---|---|---|---|
 | `attend_fall` | 1 | `track_id` | `Alert` EMERGENCY al personal |
@@ -79,8 +82,23 @@ Un recordatorio es P2 si lo ordena personal (o es programado) y P3 si lo pide un
    Si no es `interruptible`, responde que vuelve más tarde y encola la petición.
 3. **Dos misiones de igual prioridad**: orden de llegada; el `deadline` desempata.
 4. **Persona no encontrada** tras buscar en todas las zonas: la misión termina en
-   `STATE_PARTIAL` o `STATE_FAILED` y, si `report_on_failure`, se publica un
-   `Alert` `LEVEL_INFO`/`LEVEL_WARNING` para `report_to`.
+   `STATE_PARTIAL` o `STATE_FAILED` con `CODE_PERSON_NOT_FOUND` y, si
+   `report_on_failure`, se publica un `Alert` `LEVEL_INFO`/`LEVEL_WARNING` para `report_to`.
+5. Una misión pausada publica `STATE_PAUSED` con `code: CODE_PREEMPTED` y
+   `preempted_by` = `mission_id` de la misión que la interrumpió.
+6. **Misiones programadas** (`ORIGIN_SCHEDULE`) quedan en `STATE_QUEUED` hasta
+   `start_time`; si pasa el `deadline` sin terminar → `CODE_TIMEOUT`.
+7. **Cancelar**: el personal (o quien la pidió) usa `CancelMission`. Una emergencia
+   en curso no se puede cancelar (`CODE_NOT_CANCELABLE`).
+8. **Emergencias con confirmación**: los `Alert` con `requires_ack: true` se
+   repiten hasta que alguien del personal llama a `AckAlert`.
+
+### 1.5 Verificación de identidad
+
+Saber que Juan es cuidador **no demuestra** que quien habla sea Juan. Por eso el
+manager nunca autoriza solo con `requested_by`: pide la verificación de identidad
+de esa petición (`request_id`) al componente de identificación y luego consulta el
+rol en el registro. Detalle en la [sección 3](#3-identificación-de-personas).
 
 ---
 
@@ -95,7 +113,7 @@ Ejemplo: **Juan** (encargado) dice *"Dale las vitaminas a María y a Pedro"*.
 | 1 | `UserCommand` | topic | La voz se convierte en texto y se publica con `request_id`, idioma, confianza e identidad del hablante. |
 | 2 | 🧠 `command_interpreter` | nodo | Entiende la orden y arma un `MissionSpec` (`mission_type: dispense_vitamins`, objetivos `María`, `Pedro`). |
 | 2b | `ClarificationRequest` → `SpeakText` | topic → action | Si falta algo (¿qué vitamina?) publica la pregunta y el robot la dice en voz alta. La respuesta del usuario vuelve a entrar como un **nuevo `UserCommand` con el mismo `session_id`**. |
-| 3 | `RegisterMission` | service | El `mission_manager` valida rol, tipo y parámetros, **asigna la prioridad** y responde `accepted` + `mission_id`, o un código de rechazo. |
+| 3 | `RegisterMission` | service | El `mission_manager` valida tipo y parámetros, **verifica la identidad** (`GetRequestIdentity`) y el rol (`GetPerson`), **asigna la prioridad** y responde `accepted` + `mission_id`, o un código de rechazo. |
 | 4 | `ExecuteMission` | action | Cuando le toca el turno, la misión se ejecuta con feedback de progreso. Se puede cancelar. |
 | 5 | `MissionStatus` | topic | Estado de la misión: en cola, ejecutando, pausada, parcial, completada… |
 | 5 | `RobotActivity` | topic | Qué está haciendo el robot ahora mismo: navegando, buscando a María, conversando… |
@@ -111,19 +129,83 @@ llama directamente a `RegisterMission` con `origin: ORIGIN_DETECTION`.
 
 ![Identificación del hablante](imagenes/Diagrama_personal.png)
 
-1. La cámara/voz identifica a quien habla y lo publica en
-   `UserCommand.identity_status` (`UNKNOWN`, `CANDIDATE`, `VERIFIED`) junto con
-   su `person_id`.
-2. Con el `person_id`, el `mission_manager` busca el **rol** en el registro de
-   personas (`Person.role`, ver [`personas.yaml`](#65-registro-de-personas-personasyaml)).
-3. Según el rol decide qué puede pedir (tabla [1.2](#12-quién-puede-pedir-qué)):
-   - `ROLE_STAFF` → tareas de cuidado y sociales.
-   - `ROLE_PATIENT` → ayuda y tareas sociales.
-   - `ROLE_UNKNOWN` → se rechaza con `CODE_NOT_AUTHORIZED`.
+### 3.1 Tres datos distintos
 
-> En el diagrama aparece `UserCommand ROLE_...`, pero el rol **no** está dentro
-> de `UserCommand`: está en `Person`. `UserCommand` solo lleva `identity_status`
-> y `person_id`.
+| Dato | Pregunta que responde | Dónde vive | Quién lo produce |
+|---|---|---|---|
+| `person_id` | ¿Qué persona se está identificando? | `IdentityVerification` | Componente de identificación |
+| `identity_status` | ¿Se verificó que realmente es esa persona? | `IdentityVerification` | Componente de identificación |
+| `role` | ¿Qué permisos tiene esa persona registrada? | `Person` (registro) | Registro de personas (`GetPerson`) |
+
+`MissionSpec.requested_by` es solo lo **declarado** por el `command_interpreter`;
+no autoriza nada por sí solo. `UserCommand.identity_status` / `person_id` son una
+**pista informativa** (para saludar o pedir que la persona se acerque a la cámara),
+tampoco sirven para autorizar.
+
+### 3.2 Flujo de verificación
+
+```
+ cámara / voz / tarjeta
+        │
+        ▼
+ componente de identificación ──(guarda por request_id)──► IdentityVerification
+        ▲                                                     │
+        │ GetRequestIdentity(request_id)                      │
+        │                                                     ▼
+ mission_manager ◄── RegisterMission(MissionSpec con request_id y requested_by)
+        │
+        └── GetPerson(person_id verificado) ──► role
+```
+
+Cuando el manager recibe `RegisterMission`, `CancelMission` o `AckAlert`:
+
+| # | Comprobación | Si falla |
+|---|---|---|
+| 1 | Llama a `GetRequestIdentity(request_id)`: ¿existe la verificación? | `CODE_IDENTITY_NOT_VERIFIED` |
+| 2 | ¿`identity_status == IDENTITY_VERIFIED`? (`CANDIDATE` es solo una hipótesis) | `CODE_IDENTITY_NOT_VERIFIED`* |
+| 3 | ¿`ahora <= valid_until`? | `CODE_IDENTITY_EXPIRED` |
+| 4 | ¿`identity.person_id == requested_by`? | `CODE_IDENTITY_MISMATCH` |
+| 5 | ¿El `request_id` no se usó ya para otra misión? | `CODE_DUPLICATE_REQUEST` |
+| 6 | `GetPerson(identity.person_id)` → ¿el `role` permite este `mission_type`? | `CODE_NOT_AUTHORIZED` |
+
+\* **Excepción de emergencia:** `attend_help_request` se acepta con
+`IDENTITY_CANDIDATE`, porque es preferible atender una falsa alarma a ignorar a
+alguien que pide ayuda.
+
+### 3.3 Disponibilidad y validez de la verificación
+
+- **Quién la produce:** solo el componente de identificación. El
+  `command_interpreter` nunca rellena `IdentityVerification`; solo copia el
+  `request_id`.
+- **Cuánto dura:** `valid_until` = momento de la verificación + un tiempo corto
+  (p. ej. 60 s, parámetro `verification_ttl_s`). Pasado ese tiempo hay que volver
+  a verificar; así una orden no se ejecuta con la identificación de alguien que
+  ya se fue.
+- **Dónde se guarda:** el componente guarda las verificaciones por `request_id`
+  y borra las caducadas. Si el manager la pide tarde, recibe `found: false`.
+- **Un solo uso:** cada `request_id` autoriza **una** misión
+  (`CODE_DUPLICATE_REQUEST` si se reutiliza).
+- **Misiones largas o programadas:** la identidad se verifica **al registrar**. Una
+  vez aceptada, la misión no necesita que la persona siga delante del robot.
+- **Cancelar y confirmar alertas:** son acciones nuevas, así que llevan su propio
+  `request_id` y se verifican igual.
+- **Orígenes internos** (`DETECTION`, `SCHEDULE`, `SYSTEM`): no tienen persona que
+  verificar. Las crean nodos del propio robot; para evitar que cualquiera las
+  publique, hay que restringir quién puede llamar a `RegisterMission`
+  (p. ej. con SROS2).
+
+### 3.4 Rol y permisos
+
+Con el `person_id` **verificado**, el manager consulta el rol con `GetPerson`
+(que lee [`personas.yaml`](#65-registro-de-personas-personasyaml)) y aplica la
+tabla [1.2](#12-quién-puede-pedir-qué):
+
+- `ROLE_STAFF` / `ROLE_ADMIN` → tareas de cuidado y sociales.
+- `ROLE_PATIENT` → ayuda y tareas sociales.
+- `ROLE_UNKNOWN` o no registrado → `CODE_NOT_AUTHORIZED`.
+
+> En el diagrama aparece `UserCommand ROLE_...`, pero el rol **no** está en
+> `UserCommand`: está en `Person`. Ver anomalía C3.
 
 ---
 
@@ -177,7 +259,7 @@ ros2 service call /uvix/register_mission uvix_interfaces/srv/RegisterMission "$(
 
 ### 6.1 Órdenes (`UserCommand`, `ClarificationRequest`, `CommandEvent`)
 
-**`UserCommand`**: un encargado verificado da una orden por voz.
+**`UserCommand`**: un encargado da una orden por voz.
 
 ```yaml
 header: {stamp: now, frame_id: ''}
@@ -189,9 +271,44 @@ raw_text: "dale las vitaminas a maría y pedro"
 text: "dar vitaminas a María y Pedro"
 language: es
 confidence: 0.92
-identity_status: 2          # IDENTITY_VERIFIED
+identity_status: 2          # pista informativa; NO autoriza
 person_id: staff_juan
 track_id: track-17
+```
+
+**`IdentityVerification`**: lo que guarda el componente de identificación para
+`req-0001` (y devuelve `GetRequestIdentity`).
+
+```yaml
+header: {stamp: now, frame_id: ''}
+request_id: req-0001
+person_id: staff_juan
+identity_status: 2          # IDENTITY_VERIFIED
+method: 3                   # METHOD_FACE_AND_VOICE
+confidence: 0.97
+track_id: track-17
+verifier: face_id_node
+valid_until: {sec: 1795000060, nanosec: 0}   # verificación + 60 s
+```
+
+**`GetRequestIdentity`**: el manager la consulta al registrar la misión.
+
+```yaml
+# Petición
+request_id: req-0001
+---
+# Respuesta: solo una hipótesis -> la misión de cuidado se rechazará
+found: true
+identity:
+  header: {stamp: {sec: 1795000000, nanosec: 0}, frame_id: ''}
+  request_id: req-0001
+  person_id: staff_juan
+  identity_status: 1        # IDENTITY_CANDIDATE
+  method: 2                 # METHOD_VOICE
+  confidence: 0.61
+  track_id: ''
+  verifier: voice_id_node
+  valid_until: {sec: 1795000060, nanosec: 0}
 ```
 
 **`UserCommand`**: una persona no registrada (se rechazará).
@@ -264,9 +381,10 @@ mission:
   requested_by: staff_juan
   target_person_ids: [patient_maria, patient_pedro]
   target_location: ''                  # buscar donde estén
-  priority: 0
+  priority: 0                          # PRIORITY_UNSET
   interruptible: true                  # admite charlas cortas
   max_duration_s: 0.0
+  start_time: {sec: 0, nanosec: 0}     # empezar ya
   deadline: {sec: 0, nanosec: 0}
   report_on_failure: true
   report_to: staff_juan
@@ -290,7 +408,8 @@ mission:
   priority: 0
   interruptible: true
   max_duration_s: 0.0
-  deadline: {sec: 1795014000, nanosec: 0}
+  start_time: {sec: 1795012200, nanosec: 0}   # 14:30, empieza la ronda
+  deadline:   {sec: 1795014000, nanosec: 0}   # 15:00, hora de la terapia
   report_on_failure: true
   report_to: staff_ana
   parameters:
@@ -312,6 +431,7 @@ mission:
   priority: 0
   interruptible: true
   max_duration_s: 120.0
+  start_time: {sec: 0, nanosec: 0}
   deadline: {sec: 0, nanosec: 0}
   report_on_failure: false
   report_to: ''
@@ -334,6 +454,7 @@ mission:
   priority: 0
   interruptible: false
   max_duration_s: 0.0
+  start_time: {sec: 0, nanosec: 0}
   deadline: {sec: 0, nanosec: 0}
   report_on_failure: true
   report_to: staff_ana
@@ -350,21 +471,48 @@ code: 0                     # CODE_OK
 mission_id: mis-0042
 message: "Registrada con prioridad 2; en cola detrás de 0 misiones"
 ---
-# Rechazada: un paciente pide dispensar vitaminas
+# Rechazada: un paciente (verificado) pide dispensar vitaminas
 accepted: false
 code: 4                     # CODE_NOT_AUTHORIZED
 mission_id: ''
 message: "dispense_vitamins requiere ROLE_STAFF"
+---
+# Rechazada: "Juan" solo identificado por voz (CANDIDATE)
+accepted: false
+code: 5                     # CODE_IDENTITY_NOT_VERIFIED
+mission_id: ''
+message: "Identidad no verificada; acérquese a la cámara"
+---
+# Rechazada: la verificación caducó antes de registrar
+accepted: false
+code: 9                     # CODE_IDENTITY_EXPIRED
+mission_id: ''
+message: "Verificación de req-0001 vencida; repita la orden"
+---
+# Rechazada: requested_by no coincide con la persona verificada
+accepted: false
+code: 10                    # CODE_IDENTITY_MISMATCH
+mission_id: ''
+message: "requested_by=staff_juan pero se verificó a patient_pedro"
 ```
 
 ### 6.3 Ejecución (`ExecuteMission`, `MissionStatus`, `RobotActivity`, `Alert`, `SpeakText`)
 
-**`ExecuteMission`**: feedback durante la ejecución.
+**`ExecuteMission`**: feedback durante la ejecución y resultado final.
 
 ```yaml
+# Feedback
 state: 2                    # STATE_EXECUTING (constantes de MissionStatus)
 current_step: "Buscando a patient_pedro"
 progress: 0.5
+---
+# Result
+success: false              # solo true si state es STATE_COMPLETED
+state: 5                    # STATE_PARTIAL
+code: 20                    # CODE_PERSON_NOT_FOUND
+detail: "patient_pedro no encontrado"
+completed_targets: [patient_maria]
+failed_targets: [patient_pedro]
 ```
 
 **`MissionStatus`**: terminó parcial (no encontró a Pedro).
@@ -374,8 +522,9 @@ header: {stamp: now, frame_id: ''}
 mission_id: mis-0042
 mission_type: dispense_vitamins
 state: 5                    # STATE_PARTIAL
-code: 0
+code: 20                    # CODE_PERSON_NOT_FOUND
 detail: "patient_pedro no encontrado tras recorrer todas las zonas"
+preempted_by: ''
 progress: 1.0
 current_target: ''
 completed_targets: [patient_maria]
@@ -384,16 +533,42 @@ started:  {sec: 1795000000, nanosec: 0}
 finished: {sec: 1795000600, nanosec: 0}
 ```
 
-**`RobotActivity`**: buscando a un paciente.
+**`MissionStatus`**: pausada por una caída.
 
 ```yaml
 header: {stamp: now, frame_id: ''}
-mode: 0                     # ver anomalía B1
+mission_id: mis-0042
+mission_type: dispense_vitamins
+state: 3                    # STATE_PAUSED
+code: 21                    # CODE_PREEMPTED
+detail: "Pausada por emergencia"
+preempted_by: mis-0050      # la misión attend_fall
+progress: 0.5
+current_target: ''
+completed_targets: [patient_maria]
+failed_targets: []
+started:  {sec: 1795000000, nanosec: 0}
+finished: {sec: 0, nanosec: 0}
+```
+
+**`RobotActivity`**: buscando a un paciente / bailando.
+
+```yaml
+header: {stamp: now, frame_id: ''}
+mode: 1                     # MODE_MISSION
 mission_id: mis-0042
 mission_type: dispense_vitamins
 target_person_id: patient_pedro
 activity: 2                 # ACTIVITY_SEARCHING_PERSON
 description: "Revisando habitación 3"
+---
+header: {stamp: now, frame_id: ''}
+mode: 2                     # MODE_SOCIAL
+mission_id: mis-0043
+mission_type: dance
+target_person_id: patient_maria
+activity: 7                 # ACTIVITY_DANCING
+description: "Bailando con María (quedan 80 s)"
 ```
 
 **`Alert`**: emergencia por caída / informe de misión.
@@ -408,6 +583,7 @@ about_person_id: patient_pedro
 notify_person_id: staff_ana
 location: pasillo_b
 text: "Caída detectada. Pedro en el suelo, no responde."
+requires_ack: true          # se repite hasta AckAlert
 ---
 # Informe (persona no encontrada)
 header: {stamp: now, frame_id: ''}
@@ -418,6 +594,43 @@ about_person_id: patient_pedro
 notify_person_id: staff_juan
 location: ''
 text: "No encontré a Pedro para darle la vitamina C."
+requires_ack: false
+```
+
+**`AckAlert`**: Ana confirma que atendió la caída.
+
+```yaml
+alert_id: alt-0100
+request_id: req-0031        # Ana se verificó al confirmar
+acknowledged_by: staff_ana
+note: "Pedro atendido, sin lesiones"
+```
+
+**`CancelMission`**: Juan cancela la entrega de vitaminas.
+
+```yaml
+mission_id: mis-0042
+request_id: req-0040        # nueva verificación para esta acción
+requested_by: staff_juan
+reason: "María ya tomó la vitamina en el desayuno"
+```
+
+```yaml
+# Respuesta
+accepted: true
+code: 0                     # CODE_OK
+message: "Misión mis-0042 cancelada"
+```
+
+**`GetPerson`**: consultar el rol de quien habla.
+
+```yaml
+# Petición
+person_id: staff_juan
+---
+# Respuesta
+found: true
+person: {person_id: staff_juan, display_name: Juan, role: 2}   # ROLE_STAFF
 ```
 
 **`SpeakText`**: objetivo de la acción.
@@ -457,7 +670,7 @@ needs_replacement: false
 
 ### 6.5 Registro de personas (`personas.yaml`)
 
-Archivo de datos que carga el `mission_manager` para mapear `person_id` → `Person`.
+Archivo de datos que carga el nodo que sirve `GetPerson` para mapear `person_id` → `Person`.
 No es un archivo de parámetros de ROS (contiene listas de objetos).
 
 ```yaml
@@ -512,6 +725,17 @@ mission_manager:
       chat: 1
 ```
 
+**`identity_manager.yaml`** (componente de identificación)
+
+```yaml
+identity_manager:
+  ros__parameters:
+    verification_ttl_s: 60.0           # valid_until = verificación + 60 s
+    min_confidence_verified: 0.90      # por debajo -> IDENTITY_CANDIDATE
+    accepted_methods: [1, 3, 4]        # FACE, FACE_AND_VOICE, BADGE (solo voz no verifica)
+    cleanup_period_s: 10.0             # borra verificaciones caducadas
+```
+
 **`power_manager.yaml`**
 
 ```yaml
@@ -527,36 +751,36 @@ power_manager:
 
 ## 7. Anomalías encontradas
 
-### 7.1 Rompen la compilación
+### 7.1 Errores de compilación ✅ resueltos
 
-| # | Dónde | Problema | Arreglo |
+| # | Dónde | Problema | Arreglo aplicado |
 |---|---|---|---|
-| A1 | `MissionSpec.msg`, `RegisterMission.srv`, `ExecuteMission.action` | Usan `uvix_interface/...` pero el paquete se llama **`uvix_interfaces`** | Cambiar a `uvix_interfaces/...`, o solo `MissionSpec` / `KeyValue` (mismo paquete) |
-| A2 | `MissionSpec.msg` | El campo `uint8 priority` está declarado **dos veces** | Dejar uno solo, debajo de las constantes `PRIORITY_` |
-| A3 | `CMakeLists.txt` | Falta `find_package(rosidl_default_generators REQUIRED)` (y `std_msgs`, `builtin_interfaces`) **antes** de `rosidl_generate_interfaces` | Agregar los `find_package` arriba |
-| A4 | `CMakeLists.txt` | No se generan `MissionStatus`, `Alert`, `Person`, `RobotActivity`, `SystemStatus`, `PowerStatus` | Añadirlos a la lista |
-| A5 | `PowerStatus.msg` | Usa `sensor_msgs/BatteryState` pero `sensor_msgs` no está en `package.xml` ni en `DEPENDENCIES` | Añadir `<depend>sensor_msgs</depend>` y `sensor_msgs` en CMake |
+| A1 | `MissionSpec`, `RegisterMission`, `ExecuteMission` | Usaban `uvix_interface/...` (sin la *s*) | Ahora `uvix_interfaces/...` |
+| A2 | `MissionSpec.msg` | `uint8 priority` declarado dos veces | Un solo campo, debajo de las constantes `PRIORITY_` |
+| A3 | `CMakeLists.txt` | Faltaban los `find_package` antes de `rosidl_generate_interfaces` | Añadidos `rosidl_default_generators`, `std_msgs`, `builtin_interfaces`, `sensor_msgs`, `action_msgs` y `ament_export_dependencies(rosidl_default_runtime)` |
+| A4 | `CMakeLists.txt` | 6 mensajes no se generaban | Ahora se generan las 17 interfaces |
+| A5 | `package.xml` / CMake | Faltaba `sensor_msgs` (luego quedó duplicado) | Una sola `<depend>sensor_msgs</depend>` + en `DEPENDENCIES` |
 
-### 7.2 Inconsistencias de diseño
+### 7.2 Inconsistencias de diseño ✅ resueltas
 
-| # | Dónde | Problema | Propuesta |
+| # | Dónde | Problema | Solución aplicada |
 |---|---|---|---|
-| B1 | `RobotActivity.mode` | Dice "constantes de SystemStatus", pero `SystemStatus` no tiene constantes de modo | Quitar `mode` o definir `MODE_IDLE/MISSION/SOCIAL/EMERGENCY/CHARGING` |
-| B2 | `RobotActivity` | Faltan actividades: bailar, dispensar, entregar, cargar, atender emergencia | Añadir `ACTIVITY_DANCING`, `DISPENSING`, `DELIVERING`, `CHARGING`, `ATTENDING_EMERGENCY` |
-| B3 | `ExecuteMission` feedback | Usa estados de `CommandEvent`, que no tiene `PAUSED` ni `PARTIAL` | Usar las constantes `STATE_` de `MissionStatus` |
-| B4 | `ExecuteMission` result | Solo `success`; no distingue parcial ni dice a quién no encontró | Añadir `uint8 state`, `string[] completed_targets`, `string[] failed_targets` |
-| B5 | `MissionStatus.code` | No hay códigos de fallo en ejecución | Añadir `PERSON_NOT_FOUND`, `PREEMPTED`, `TIMEOUT`, `LOW_BATTERY`, `NAVIGATION_FAILED` |
-| B6 | `MissionStatus` | Al pausarse no se sabe por qué misión | Añadir `string preempted_by` |
-| B7 | `MissionSpec` | No hay hora de inicio para `ORIGIN_SCHEDULE` (solo `deadline`) | Añadir `builtin_interfaces/Time start_time` (cero = ya) |
-| B8 | `MissionSpec.mission_type` | Texto libre: un error tipográfico solo se detecta en ejecución | Validar contra el catálogo (sección 1.3) → `CODE_UNKNOWN_MISSION_TYPE` |
-| B9 | `MissionSpec` | `requested_by` no lleva estado de identidad | El manager lo cruza con `UserCommand.identity_status` vía `request_id`, o añadir `uint8 requester_role` |
-| B10 | `Alert` | Una emergencia no tiene confirmación de que alguien la atendió | Añadir `bool requires_ack` y un `AckAlert` |
-| B11 | Cancelar / pausar | El personal no puede cancelar una misión desde fuera de la acción | Añadir `srv/CancelMission.srv` (`mission_id`, `requested_by`, `reason`) |
-| B12 | `Person.msg` | Definido pero no se usa en ninguna otra interfaz | Usarlo en `GetPerson.srv` o en `UserCommand` |
-| B13 | `package.xml` | `description` está en `TODO` | Escribir una descripción real |
-| B14 | `ClarificationRequest` | No existe mensaje de respuesta | Documentado: la respuesta es un nuevo `UserCommand` con el mismo `session_id` |
+| B1 | `RobotActivity.mode` | Apuntaba a constantes que no existían | Constantes propias `MODE_IDLE/MISSION/SOCIAL/EMERGENCY/CHARGING` |
+| B2 | `RobotActivity` | Faltaban actividades | `ACTIVITY_DANCING`, `DISPENSING`, `DELIVERING`, `CHARGING`, `ATTENDING_EMERGENCY` (7–11) |
+| B3 | `ExecuteMission` feedback | Usaba estados de `CommandEvent` | Usa las constantes `STATE_` de `MissionStatus` |
+| B4 | `ExecuteMission` result | Solo `success` | Añadidos `state`, `completed_targets`, `failed_targets` |
+| B5 | `MissionStatus.code` | Sin códigos de ejecución | `CODE_PERSON_NOT_FOUND=20`, `PREEMPTED=21`, `TIMEOUT=22`, `LOW_BATTERY=23`, `NAVIGATION_FAILED=24` (empiezan en 20 para no chocar con los de `RegisterMission`) |
+| B6 | `MissionStatus` | No se sabía quién la pausó | `string preempted_by` |
+| B7 | `MissionSpec` | Sin hora de inicio | `builtin_interfaces/Time start_time` (cero = ya) |
+| B8 | `MissionSpec.mission_type` | Texto libre | Constantes `TYPE_*` con el catálogo; el manager valida → `CODE_UNKNOWN_MISSION_TYPE` |
+| B9 | `MissionSpec` | `requested_by` solo dice quién **declara** ser; con eso el manager podría aceptar una orden basada en una hipótesis de identidad | Se separan los 3 datos: `person_id` + `identity_status` vienen de `IdentityVerification` (componente confiable), enlazada por `request_id` y consultada con `GetRequestIdentity`, con caducidad (`valid_until`) y un solo uso; el `role` se consulta con `GetPerson`. `UserCommand.identity_status` queda como pista informativa. `CancelMission` y `AckAlert` llevan también `request_id`. Nuevos códigos `CODE_IDENTITY_EXPIRED` y `CODE_IDENTITY_MISMATCH` (sección 3) |
+| B10 | `Alert` | Sin confirmación | `bool requires_ack` + `srv/AckAlert.srv` |
+| B11 | Cancelar | Sin forma de cancelar | `srv/CancelMission.srv` |
+| B12 | `Person.msg` | No se usaba | `srv/GetPerson.srv` lo devuelve |
+| B13 | `package.xml` | `description` en `TODO` | Descripción real |
+| B14 | `ClarificationRequest` | Sin mensaje de respuesta | Comentario en el `.msg`: la respuesta es un nuevo `UserCommand` con el mismo `session_id` |
 
-### 7.3 Diagramas y archivos
+### 7.3 Diagramas y archivos ⏳ pendientes
 
 | # | Dónde | Problema | Propuesta |
 |---|---|---|---|
@@ -574,32 +798,37 @@ power_manager:
 
 ### Mensajes (`msg/`)
 
-| Archivo | Para qué sirve | En CMake |
-|---|---|---|
-| `KeyValue.msg` | Par clave/valor para parámetros de misión | ✅ |
-| `UserCommand.msg` | Orden que llega por voz, texto o gesto, con identidad del hablante | ✅ |
-| `ClarificationRequest.msg` | Pregunta al usuario cuando la orden es ambigua o faltan datos | ✅ |
-| `CommandEvent.msg` | Bitácora del ciclo de vida de una orden | ✅ |
-| `MissionSpec.msg` | Definición de una misión: origen, prioridad, objetivos, informe | ✅ |
-| `MissionStatus.msg` | Estado y progreso de una misión, pacientes atendidos / no encontrados | ❌ |
-| `Alert.msg` | Emergencias, avisos e informes al personal | ❌ |
-| `Person.msg` | Persona registrada y su rol | ❌ |
-| `RobotActivity.msg` | Actividad actual del robot | ❌ |
-| `SystemStatus.msg` | Salud global del sistema | ❌ |
-| `PowerStatus.msg` | Estado de baterías y necesidad de carga | ❌ |
+| Archivo | Para qué sirve |
+|---|---|
+| `KeyValue.msg` | Par clave/valor para parámetros de misión |
+| `UserCommand.msg` | Orden que llega por voz, texto o gesto, con identidad del hablante |
+| `ClarificationRequest.msg` | Pregunta al usuario cuando la orden es ambigua o faltan datos |
+| `CommandEvent.msg` | Bitácora del ciclo de vida de una orden |
+| `MissionSpec.msg` | Definición de una misión: tipo, origen, prioridad, objetivos, horario, informe |
+| `MissionStatus.msg` | Estado y progreso de una misión, quién la pausó, pacientes atendidos / no encontrados |
+| `Alert.msg` | Emergencias, avisos e informes al personal, con confirmación opcional |
+| `Person.msg` | Persona registrada y su rol |
+| `RobotActivity.msg` | Modo y actividad actual del robot |
+| `SystemStatus.msg` | Salud global del sistema |
+| `PowerStatus.msg` | Estado de baterías y necesidad de carga |
+| `IdentityVerification.msg` | Quién hizo una petición (`request_id`), si está verificado y hasta cuándo vale |
 
 ### Servicios (`srv/`)
 
-| Archivo | Para qué sirve | En CMake |
-|---|---|---|
-| `RegisterMission.srv` | Pide al `mission_manager` aceptar una misión | ✅ |
+| Archivo | Para qué sirve |
+|---|---|
+| `RegisterMission.srv` | Pide al `mission_manager` aceptar una misión |
+| `CancelMission.srv` | Cancela una misión registrada o en curso |
+| `AckAlert.srv` | El personal confirma que atendió una alerta |
+| `GetPerson.srv` | Devuelve la `Person` (y su rol) de un `person_id` |
+| `GetRequestIdentity.srv` | Devuelve la `IdentityVerification` de un `request_id` |
 
 ### Acciones (`action/`)
 
-| Archivo | Para qué sirve | En CMake |
-|---|---|---|
-| `ExecuteMission.action` | Ejecuta una misión registrada, con feedback de progreso | ✅ |
-| `SpeakText.action` | Hace hablar al robot (TTS), cancelable | ✅ |
+| Archivo | Para qué sirve |
+|---|---|
+| `ExecuteMission.action` | Ejecuta una misión registrada, con feedback de progreso |
+| `SpeakText.action` | Hace hablar al robot (TTS), cancelable |
 
 ### Topics, servicios y acciones sugeridos
 
@@ -609,6 +838,10 @@ power_manager:
 | `/uvix/clarification_request` | `ClarificationRequest` | `command_interpreter` |
 | `/uvix/command_events` | `CommandEvent` | Todos los nodos del flujo |
 | `/uvix/register_mission` | `RegisterMission` (srv) | `mission_manager` |
+| `/uvix/cancel_mission` | `CancelMission` (srv) | `mission_manager` |
+| `/uvix/ack_alert` | `AckAlert` (srv) | `mission_manager` |
+| `/uvix/get_person` | `GetPerson` (srv) | Registro de personas |
+| `/uvix/get_request_identity` | `GetRequestIdentity` (srv) | Componente de identificación |
 | `/uvix/execute_mission` | `ExecuteMission` (action) | Ejecutor de misiones |
 | `/uvix/mission_status` | `MissionStatus` | `mission_manager` |
 | `/uvix/robot_activity` | `RobotActivity` | Ejecutor de misiones |

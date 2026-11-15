@@ -1,4 +1,5 @@
 # msg/ClarificationRequest.msg
+# La respuesta del usuario llega como un nuevo UserCommand con el mismo session_id.
 std_msgs/Header header
 string request_id          # orden que se quiere aclarar
 string session_id

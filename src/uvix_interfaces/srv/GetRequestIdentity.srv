@@ -1,0 +1,7 @@
+# srv/GetRequestIdentity.srv
+# El mission_manager pregunta al componente de identificación
+# quién hizo la petición request_id.
+string request_id
+---
+bool found                     # false si no hay verificación o ya caducó y se borró
+uvix_interfaces/IdentityVerification identity
