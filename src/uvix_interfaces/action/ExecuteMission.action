@@ -1,0 +1,10 @@
+# action/ExecuteMission.action
+uvix_interface/MissionSpec mission
+---
+bool success
+uint16 code
+string detail
+---
+uint8 state                # usa las constantes STATE_ de CommandEvent
+string current_step
+float32 progress           # 0.0 a 1.0
