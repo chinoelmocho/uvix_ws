@@ -1,0 +1,189 @@
+version_catalogo: 0.1.0
+paquete_interfaces: uvix_interfaces
+distro_ros: humble
+
+capacidades:
+
+  - id: personas
+    nombre: Detección y seguimiento de personas
+    descripcion: >
+      Detecta cuerpos humanos en cámara/LiDAR y les asigna un track_id temporal.
+      NO identifica a nadie: un track no es un paciente.
+    entrada:
+      - {nombre_ros: /camera/color/image_raw, tipo: sensor_msgs/msg/Image}
+      - {nombre_ros: /camera/depth/points, tipo: sensor_msgs/msg/PointCloud2, opcional: true}
+    salida:
+      nombre_ros: /uvix/perception/person_tracks
+      clase: topic
+      tipo: vision_msgs/msg/Detection3DArray
+      detalle_tipo: 'estándar; results[].hypothesis.class_id = "person", id = track_id'
+      estado_interfaz: propuesta
+      detalle_estado_interfaz: 'falta añadir vision_msgs como dependencia'
+      qos: {reliability: best_effort, history: keep_last, depth: 5}
+      frecuencia_hz: 10
+    responsable:
+      modulo: uvix_perception
+      persona: por asignar
+    consumidores: [rostros, posturas_gestos, uvix_interaction, mission_manager]
+    timeout_s: 1.0
+    detalle_timeout_s: 'sin mensajes en 1 s -> percepción no disponible'
+    fallos:
+      - {condicion: sin mensajes durante timeout_s, efecto: "SystemStatus DEGRADED con failed_components [person_tracker]"}
+      - {condicion: oclusión breve (< max_age del tracker), efecto: se conserva el track_id}
+      - {condicion: persona perdida más de max_age, efecto: se cierra el track; al reaparecer recibe un track_id NUEVO}
+    version: 0.1.0
+    alcance_m1: simulado
+    detalle_alcance_m1: 'posiciones de personas inyectadas desde la simulación'
+    modelo: pendiente
+
+  - id: rostros
+    nombre: Reconocimiento facial e identidad
+    descripcion: >
+      Compara el rostro de un track con los rostros registrados y emite una
+      verificación de identidad para una petición (request_id). Es el
+      componente confiable de identidad.
+    entrada:
+      - {nombre_ros: /camera/color/image_raw, tipo: sensor_msgs/msg/Image}
+      - {nombre_ros: /uvix/perception/person_tracks, tipo: vision_msgs/msg/Detection3DArray}
+      - {nombre_ros: /uvix/user_command, tipo: uvix_interfaces/msg/UserCommand, uso: saber qué request_id verificar}
+    salida:
+      nombre_ros: /uvix/get_request_identity
+      clase: srv
+      tipo: uvix_interfaces/srv/GetRequestIdentity
+      detalle_tipo: 'devuelve IdentityVerification'
+      estado_interfaz: existe
+      parametros: {verification_ttl_s: 60.0, min_confidence_verified: 0.90}
+    responsable:
+      modulo: uvix_perception (identity_manager)
+      persona: por asignar
+    consumidores: [mission_manager, command_interpreter]
+    timeout_s: 2.0
+    detalle_timeout_s: 'respuesta del servicio'
+    fallos:
+      - {condicion: servicio no responde en timeout_s, efecto: RegisterMission CODE_IDENTITY_NOT_VERIFIED}
+      - {condicion: sin verificación para ese request_id, efecto: found false -> CODE_IDENTITY_NOT_VERIFIED}
+      - {condicion: confianza menor que el umbral, efecto: IDENTITY_CANDIDATE; solo vale para pedir ayuda}
+      - {condicion: verificación vencida, efecto: CODE_IDENTITY_EXPIRED}
+      - {condicion: rostro no registrado, efecto: IDENTITY_UNKNOWN con person_id vacío}
+    version: 0.1.0
+    alcance_m1: solo_contrato
+    detalle_alcance_m1: 'en M1 la identidad se inyecta (nodo simulado); reconocimiento real en M3 (UVIX-27)'
+    modelo: pendiente
+
+  - id: posturas_gestos
+    nombre: Posturas (caídas) y gestos
+    descripcion: >
+      Estima la postura de cada track para detectar caídas y reconoce gestos
+      de solicitud de atención (mano levantada).
+    entrada:
+      - {nombre_ros: /camera/color/image_raw, tipo: sensor_msgs/msg/Image}
+      - {nombre_ros: /uvix/perception/person_tracks, tipo: vision_msgs/msg/Detection3DArray}
+    salida:
+      - nombre_ros: /uvix/register_mission
+        clase: srv
+        tipo: uvix_interfaces/srv/RegisterMission
+        detalle_tipo: 'caída -> mission_type attend_fall, origin ORIGIN_DETECTION'
+        estado_interfaz: existe
+      - nombre_ros: /uvix/user_command
+        clase: topic
+        tipo: uvix_interfaces/msg/UserCommand
+        detalle_tipo: 'gesto -> modality MODALITY_GESTURE'
+        estado_interfaz: existe
+        qos: {reliability: reliable, history: keep_last, depth: 10}
+    responsable:
+      modulo: uvix_perception
+      persona: por asignar
+    consumidores: [mission_manager, command_interpreter]
+    timeout_s: 2.0
+    detalle_timeout_s: 'respuesta de RegisterMission'
+    fallos:
+      - {condicion: RegisterMission no responde, efecto: reintentar cada 1 s y publicar Alert EMERGENCY directamente}
+      - {condicion: falsa caída, efecto: el personal la descarta con AckAlert; se registra para evaluación}
+      - {condicion: gesto repetido del mismo track, efecto: una sola solicitud por ventana de repetición (UVIX-13)}
+    version: 0.1.0
+    alcance_m1: simulado
+    detalle_alcance_m1: 'caída inyectada como llamada a RegisterMission; gesto fuera de M1 (M7)'
+    modelo: pendiente
+
+  - id: voz_entrada
+    nombre: Voz de entrada (reconocimiento de habla)
+    descripcion: >
+      Convierte lo que dice una persona en texto y publica una orden por cada
+      enunciado, con request_id nuevo.
+    entrada:
+      - {nombre_ros: /audio/raw, tipo: audio_common_msgs/msg/AudioData, opcional: true}
+      - {nombre_ros: /uvix/user_command_text, tipo: std_msgs/msg/String, uso: entrada de texto para pruebas}
+    salida:
+      nombre_ros: /uvix/user_command
+      clase: topic
+      tipo: uvix_interfaces/msg/UserCommand
+      estado_interfaz: existe
+      qos: {reliability: reliable, history: keep_last, depth: 10}
+    responsable:
+      modulo: uvix_interaction (asr_node)
+      persona: por asignar
+    consumidores: [command_interpreter, rostros, CommandEvent (bitácora)]
+    timeout_s: 10.0
+    detalle_timeout_s: 'fin de enunciado: si no termina en 10 s se descarta'
+    fallos:
+      - {condicion: confianza baja, efecto: el interpreter publica ClarificationRequest REASON_LOW_CONFIDENCE}
+      - {condicion: idioma no soportado, efecto: language vacío; el interpreter pide repetir}
+      - {condicion: micrófono no disponible, efecto: "SystemStatus DEGRADED [microphone]; sigue la entrada de texto"}
+    version: 0.1.0
+    alcance_m1: simulado
+    detalle_alcance_m1: 'órdenes escritas con ros2 topic pub; voz real en M3 (UVIX-12)'
+    modelo: pendiente
+
+  - id: voz_salida
+    nombre: Voz de salida (síntesis de habla)
+    descripcion: Hace hablar al robot; cancelable por emergencias.
+    entrada:
+      nombre_ros: /uvix/speak
+      clase: action
+      tipo: uvix_interfaces/action/SpeakText
+      estado_interfaz: existe
+    salida:
+      - {nombre_ros: /audio/out, tipo: audio_common_msgs/msg/AudioData, opcional: true}
+      - {descripcion: "resultado de la acción: RESULT_COMPLETED, CANCELED, TTS_UNAVAILABLE o LANGUAGE_UNSUPPORTED"}
+    responsable:
+      modulo: uvix_interaction (tts_node)
+      persona: por asignar
+    consumidores: [command_interpreter, mission_manager, ejecutor de misiones]
+    timeout_s: 15.0
+    detalle_timeout_s: 'por frase; si se excede se cancela la acción'
+    fallos:
+      - {condicion: TTS no disponible, efecto: RESULT_TTS_UNAVAILABLE; mostrar texto en pantalla si existe}
+      - {condicion: emergencia mientras habla, efecto: se cancela si interruptible es true}
+      - {condicion: idioma no soportado, efecto: RESULT_LANGUAGE_UNSUPPORTED}
+    version: 0.1.0
+    alcance_m1: simulado
+    detalle_alcance_m1: 'nodo que imprime el texto en el log y responde COMPLETED'
+    modelo: pendiente
+
+  - id: personas_permisos
+    nombre: Registro de personas y permisos
+    descripcion: >
+      Registro persistente de personas (person_id) con su rol. Responde qué
+      permisos tiene una persona; NO dice quién está hablando.
+    entrada:
+      - {archivo: personas.yaml, uso: datos ficticios en M1}
+      - {nombre_ros: /uvix/get_person, clase: srv, tipo: uvix_interfaces/srv/GetPerson, uso: petición}
+    salida:
+      nombre_ros: /uvix/get_person
+      clase: srv
+      tipo: uvix_interfaces/srv/GetPerson
+      detalle_tipo: 'devuelve Person (person_id, display_name, role)'
+      estado_interfaz: existe
+    responsable:
+      modulo: servicio local de datos (people_registry)
+      persona: por asignar
+    consumidores: [mission_manager, command_interpreter, uvix_interaction]
+    timeout_s: 1.0
+    fallos:
+      - {condicion: person_id no existe, efecto: found false, role ROLE_UNKNOWN -> CODE_NOT_AUTHORIZED}
+      - {condicion: servicio no responde, efecto: el manager rechaza con CODE_INTERNAL_ERROR (nunca asume un rol)}
+      - {condicion: archivo corrupto al arrancar, efecto: "SystemStatus ERROR [people_registry]"}
+    version: 0.1.0
+    alcance_m1: implementado
+    detalle_alcance_m1: 'lectura de personas.yaml con perfiles ficticios (UVIX-15, UVIX-26)'
+    modelo: no_aplica

@@ -1,0 +1,16 @@
+# action/ExecuteMission.action
+# Goal
+uvix_interfaces/MissionSpec mission
+---
+# Result
+bool success                 # true solo si state es STATE_COMPLETED
+uint8 state                  # constantes STATE_ de MissionStatus
+uint16 code                  # constantes CODE_ de MissionStatus / RegisterMission
+string detail
+string[] completed_targets
+string[] failed_targets
+---
+# Feedback
+uint8 state                  # constantes STATE_ de MissionStatus
+string current_step
+float32 progress             # 0.0 a 1.0

@@ -1,0 +1,18 @@
+# srv/AckAlert.srv
+# El personal confirma que atendió una alerta con requires_ack.
+string alert_id
+string request_id          # vincula con IdentityVerification de quien confirma
+string acknowledged_by     # person_id declarado; debe coincidir con el verificado
+string note
+---
+uint16 CODE_OK=0
+uint16 CODE_ALERT_NOT_FOUND=1
+uint16 CODE_NOT_AUTHORIZED=2       # el rol verificado no es STAFF/ADMIN
+uint16 CODE_ALREADY_ACKNOWLEDGED=3
+uint16 CODE_IDENTITY_NOT_VERIFIED=4
+uint16 CODE_IDENTITY_EXPIRED=5
+uint16 CODE_IDENTITY_MISMATCH=6
+
+bool accepted
+uint16 code
+string message

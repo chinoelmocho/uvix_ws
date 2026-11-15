@@ -1,0 +1,15 @@
+
+# action/SpeakText.action
+string text
+string language
+string request_id          # vacío si no responde a una orden
+bool interruptible
+---
+uint16 RESULT_COMPLETED=0
+uint16 RESULT_CANCELED=1
+uint16 RESULT_TTS_UNAVAILABLE=2
+uint16 RESULT_LANGUAGE_UNSUPPORTED=3
+uint16 result_code
+string detail
+---
+float32 progress           # 0.0 a 1.0

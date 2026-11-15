@@ -1,0 +1,5 @@
+# srv/GetPerson.srv
+string person_id
+---
+bool found
+uvix_interfaces/Person person   # role = ROLE_UNKNOWN si found es false

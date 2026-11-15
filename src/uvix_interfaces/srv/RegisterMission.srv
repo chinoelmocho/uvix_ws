@@ -1,0 +1,19 @@
+# srv/RegisterMission.srv
+uvix_interfaces/MissionSpec mission
+---
+uint16 CODE_OK=0
+uint16 CODE_INVALID_SPEC=1
+uint16 CODE_UNKNOWN_MISSION_TYPE=2
+uint16 CODE_MISSING_PARAMETER=3
+uint16 CODE_NOT_AUTHORIZED=4
+uint16 CODE_IDENTITY_NOT_VERIFIED=5   # sin verificación o solo CANDIDATE
+uint16 CODE_DUPLICATE_REQUEST=6       # request_id ya usado
+uint16 CODE_BUSY=7
+uint16 CODE_INTERNAL_ERROR=8
+uint16 CODE_IDENTITY_EXPIRED=9        # verificación pasada de valid_until
+uint16 CODE_IDENTITY_MISMATCH=10      # requested_by distinto del person_id verificado
+
+bool accepted
+uint16 code
+string mission_id          # vacío si fue rechazada
+string message
