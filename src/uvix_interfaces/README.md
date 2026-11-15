@@ -4,9 +4,8 @@ Mensajes, servicios y acciones de ROS 2 del robot social-asistencial **UVIX**.
 Este paquete solo define interfaces; la lógica vive en `command_interpreter`,
 `mission_manager` y el resto de paquetes.
 
-
-> 📄 Catálogo de capacidades, identificadores, requisitos de modelos y evidencia
-> de verificación del hito M1: [`docs/m1_interfaces.md`](../../docs/m1_interfaces.md).
+El catálogo de capacidades, los identificadores y los requisitos de modelos del
+hito M1 están en [`docs/m1_interfaces.md`](../../docs/m1_interfaces.md).
 
 **Contenido**
 
@@ -16,9 +15,7 @@ Este paquete solo define interfaces; la lógica vive en `command_interpreter`,
 4. [Arranque y salud del sistema](#4-arranque-y-salud-del-sistema)
 5. [Baterías y carga](#5-baterías-y-carga)
 6. [Ejemplos YAML](#6-ejemplos-yaml)
-7. [Anomalías ](#7-anomalías)
-8. [Inventario de interfaces](#8-inventario-de-interfaces)
-
+7. [Inventario de interfaces](#7-inventario-de-interfaces)
 
 ---
 
@@ -38,7 +35,8 @@ ejecuta, qué espera y qué se interrumpe.
 | **3** | `PRIORITY_SOCIAL` | `ORIGIN_PATIENT` | Bailar, conversar, recordatorio a un encargado u otro paciente | Solo pausa una de prioridad 2 si esta es `interruptible`, y por un tiempo limitado (`max_duration_s`) |
 | **4** | `PRIORITY_BACKGROUND` | `ORIGIN_SYSTEM` | Ir a cargar, rondas sin urgencia | No |
 
-> Batería `LEVEL_CRITICAL` → `go_charge` con prioridad 1 (ver [sección 5](#5-baterías-y-carga)).
+Con batería `LEVEL_CRITICAL`, la misión `go_charge` se registra con prioridad 1
+(ver [sección 5](#5-baterías-y-carga)).
 
 ### 1.2 Quién puede pedir qué
 
@@ -111,7 +109,7 @@ Ejemplo: **Juan** (encargado) dice *"Dale las vitaminas a María y a Pedro"*.
 | Paso | Interfaz | Tipo | Qué pasa |
 |---|---|---|---|
 | 1 | `UserCommand` | topic | La voz se convierte en texto y se publica con `request_id`, idioma, confianza e identidad del hablante. |
-| 2 | 🧠 `command_interpreter` | nodo | Entiende la orden y arma un `MissionSpec` (`mission_type: dispense_vitamins`, objetivos `María`, `Pedro`). |
+| 2 | `command_interpreter` | nodo | Entiende la orden y arma un `MissionSpec` (`mission_type: dispense_vitamins`, objetivos `María`, `Pedro`). |
 | 2b | `ClarificationRequest` → `SpeakText` | topic → action | Si falta algo (¿qué vitamina?) publica la pregunta y el robot la dice en voz alta. La respuesta del usuario vuelve a entrar como un **nuevo `UserCommand`** (nuevo `request_id`, mismo `session_id`, `parent_request_id` = orden original). Ver [identificadores](../../docs/m1_interfaces.md#33-respuesta-a-una-aclaración). |
 | 3 | `RegisterMission` | service | El `mission_manager` valida tipo y parámetros, **verifica la identidad** (`GetRequestIdentity`) y el rol (`GetPerson`), **asigna la prioridad** y responde `accepted` + `mission_id`, o un código de rechazo. |
 | 4 | `ExecuteMission` | action | Cuando le toca el turno, la misión se ejecuta con feedback de progreso. Se puede cancelar. |
@@ -190,9 +188,8 @@ alguien que pide ayuda.
 - **Cancelar y confirmar alertas:** son acciones nuevas, así que llevan su propio
   `request_id` y se verifican igual.
 - **Orígenes internos** (`DETECTION`, `SCHEDULE`, `SYSTEM`): no tienen persona que
-  verificar. Las crean nodos del propio robot; para evitar que cualquiera las
-  publique, hay que restringir quién puede llamar a `RegisterMission`
-  (p. ej. con SROS2).
+  verificar. Las crean nodos del propio robot; solo esos nodos pueden llamar a
+  `RegisterMission` con esos orígenes (p. ej. restringido con SROS2).
 
 ### 3.4 Rol y permisos
 
@@ -203,9 +200,6 @@ tabla [1.2](#12-quién-puede-pedir-qué):
 - `ROLE_STAFF` / `ROLE_ADMIN` → tareas de cuidado y sociales.
 - `ROLE_PATIENT` → ayuda y tareas sociales.
 - `ROLE_UNKNOWN` o no registrado → `CODE_NOT_AUTHORIZED`.
-
-> En el diagrama aparece `UserCommand ROLE_...`, pero el rol **no** está en
-> `UserCommand`: está en `Person`. Ver anomalía C3.
 
 ---
 
@@ -238,11 +232,6 @@ El `power_manager` lee las dos baterías (`sensor_msgs/BatteryState`) y publica 
 | `LEVEL_CRITICAL` | Registra `go_charge`, **prioridad 1**: pausa lo que esté haciendo y va a cargar |
 | `needs_replacement` | Publica `Alert` `LEVEL_INFO` al administrador (cambiar batería) |
 
-> ⚠️ Decisión pendiente: con `go_charge` en prioridad 1, si ocurre una caída con
-> la batería crítica, ¿atiende la caída o va a cargar? Recomendación: atender la
-> emergencia mientras quede autonomía (`estimated_runtime_s`) y publicar un
-> `Alert` al personal.
-
 ---
 
 ## 6. Ejemplos YAML
@@ -255,57 +244,61 @@ ros2 service call /uvix/register_mission uvix_interfaces/srv/RegisterMission "$(
 ```
 
 `stamp: now` lo rellena `ros2` con la hora actual. Los tiempos en cero
-(`{sec: 0, nanosec: 0}`) significan "sin valor".
+(`{sec: 0, nanosec: 0}`) significan "sin valor". Los campos numéricos usan las
+constantes de cada mensaje; la tabla [Constantes usadas](#67-constantes-usadas)
+indica qué significa cada valor.
 
-### 6.1 Órdenes (`UserCommand`, `ClarificationRequest`, `CommandEvent`)
+### 6.1 Órdenes (`UserCommand`, `IdentityVerification`, `ClarificationRequest`, `CommandEvent`)
 
-**`UserCommand`**: un encargado da una orden por voz.
+**`UserCommand`**: un encargado da una orden por voz (orden nueva, sin `parent_request_id`).
 
 ```yaml
 header: {stamp: now, frame_id: ''}
 request_id: req-0001
-parent_request_id: ''       # orden nueva
+parent_request_id: ''
 session_id: ses-0001
 utterance_id: utt-0001
-modality: 2                 # MODALITY_VOICE
+modality: 2
 raw_text: "dale las vitaminas a maría y pedro"
 text: "dar vitaminas a María y Pedro"
 language: es
 confidence: 0.92
-identity_status: 2          # pista informativa; NO autoriza
+identity_status: 2
 person_id: staff_juan
 track_id: track-17
 ```
 
 **`IdentityVerification`**: lo que guarda el componente de identificación para
-`req-0001` (y devuelve `GetRequestIdentity`).
+`req-0001`, verificado por cara y voz, válido 60 s.
 
 ```yaml
 header: {stamp: now, frame_id: ''}
 request_id: req-0001
 person_id: staff_juan
-identity_status: 2          # IDENTITY_VERIFIED
-method: 3                   # METHOD_FACE_AND_VOICE
+identity_status: 2
+method: 3
 confidence: 0.97
 track_id: track-17
 verifier: face_id_node
-valid_until: {sec: 1795000060, nanosec: 0}   # verificación + 60 s
+valid_until: {sec: 1795000060, nanosec: 0}
 ```
 
-**`GetRequestIdentity`**: el manager la consulta al registrar la misión.
+**`GetRequestIdentity`**: petición del manager al registrar la misión.
 
 ```yaml
-# Petición
 request_id: req-0001
----
-# Respuesta: solo una hipótesis -> la misión de cuidado se rechazará
+```
+
+Respuesta con una identidad solo candidata (por voz); una misión de cuidado se rechazaría:
+
+```yaml
 found: true
 identity:
   header: {stamp: {sec: 1795000000, nanosec: 0}, frame_id: ''}
   request_id: req-0001
   person_id: staff_juan
-  identity_status: 1        # IDENTITY_CANDIDATE
-  method: 2                 # METHOD_VOICE
+  identity_status: 1
+  method: 2
   confidence: 0.61
   track_id: ''
   verifier: voice_id_node
@@ -325,68 +318,70 @@ raw_text: "ven aquí"
 text: "ven aquí"
 language: es
 confidence: 0.85
-identity_status: 0          # IDENTITY_UNKNOWN
+identity_status: 0
 person_id: ''
 track_id: track-21
 ```
 
-**`ClarificationRequest`**: falta la dosis.
+**`ClarificationRequest`**: falta indicar qué vitamina.
 
 ```yaml
 header: {stamp: now, frame_id: ''}
 request_id: req-0001
 session_id: ses-0001
-reason: 2                   # REASON_MISSING_PARAMETER
+reason: 2
 question: "¿Qué vitamina les doy, C o D?"
 missing_key: item
 options: [vitamina_c, vitamina_d]
 timeout_s: 20.0
 ```
 
-**`CommandEvent`**: la misión fue registrada / la orden fue rechazada.
+**`CommandEvent`**: la misión fue registrada.
 
 ```yaml
-# Registrada
 header: {stamp: now, frame_id: ''}
 event_id: evt-0003
 request_id: req-0001
 mission_id: mis-0042
 source: mission_manager
-state: 4                    # STATE_REGISTERED
-code: 0                     # CODE_OK
+state: 4
+code: 0
 detail: "Misión registrada con prioridad 2"
----
-# Rechazada (persona no registrada)
+```
+
+**`CommandEvent`**: la orden fue rechazada por venir de una persona no registrada.
+
+```yaml
 header: {stamp: now, frame_id: ''}
 event_id: evt-0010
 request_id: req-0002
 mission_id: ''
 source: mission_manager
-state: 5                    # STATE_REJECTED
-code: 4                     # CODE_NOT_AUTHORIZED
+state: 5
+code: 4
 detail: "Persona no registrada"
 ```
 
 ### 6.2 Misiones (`RegisterMission`)
 
-En la petición `priority: 0`: **el manager la sobrescribe**.
+En la petición, `mission_id` va vacío y `priority: 0`: el manager asigna ambos.
 
-**Dispensar vitaminas** (personal, P2): `dispensar_vitaminas.yaml`
+**Dispensar vitaminas** (personal, P2, interrumpible, empieza ya): `dispensar_vitaminas.yaml`
 
 ```yaml
 mission:
-  mission_id: ''                       # lo asigna el manager
+  mission_id: ''
   mission_type: dispense_vitamins
   description: "Vitamina C a María y Pedro"
-  origin: 1                            # ORIGIN_STAFF
+  origin: 1
   request_id: req-0001
   requested_by: staff_juan
   target_person_ids: [patient_maria, patient_pedro]
-  target_location: ''                  # buscar donde estén
-  priority: 0                          # PRIORITY_UNSET
-  interruptible: true                  # admite charlas cortas
+  target_location: ''
+  priority: 0
+  interruptible: true
   max_duration_s: 0.0
-  start_time: {sec: 0, nanosec: 0}     # empezar ya
+  start_time: {sec: 0, nanosec: 0}
   deadline: {sec: 0, nanosec: 0}
   report_on_failure: true
   report_to: staff_juan
@@ -395,14 +390,15 @@ mission:
     - {key: dose, value: '1'}
 ```
 
-**Ronda de recordatorio programada** (horario, P2):
+**Ronda de recordatorio programada** (horario, P2): empieza a las 14:30 y debe
+terminar antes de la terapia de las 15:00.
 
 ```yaml
 mission:
   mission_id: ''
   mission_type: reminder_round
   description: "Recordar la terapia de las 15:00"
-  origin: 4                            # ORIGIN_SCHEDULE
+  origin: 4
   request_id: ''
   requested_by: ''
   target_person_ids: [patient_maria, patient_pedro, patient_luis]
@@ -410,22 +406,22 @@ mission:
   priority: 0
   interruptible: true
   max_duration_s: 0.0
-  start_time: {sec: 1795012200, nanosec: 0}   # 14:30, empieza la ronda
-  deadline:   {sec: 1795014000, nanosec: 0}   # 15:00, hora de la terapia
+  start_time: {sec: 1795012200, nanosec: 0}
+  deadline: {sec: 1795014000, nanosec: 0}
   report_on_failure: true
   report_to: staff_ana
   parameters:
     - {key: message, value: "La terapia empieza a las 15:00 en la sala 2"}
 ```
 
-**Bailar** (paciente, P3, máx. 2 min):
+**Bailar** (paciente, P3, máximo 2 minutos):
 
 ```yaml
 mission:
   mission_id: ''
   mission_type: dance
   description: "María pidió bailar"
-  origin: 2                            # ORIGIN_PATIENT
+  origin: 2
   request_id: req-0007
   requested_by: patient_maria
   target_person_ids: [patient_maria]
@@ -441,17 +437,18 @@ mission:
     - {key: song, value: cumbia_01}
 ```
 
-**Caída detectada** (robot, P1):
+**Caída detectada** (robot, P1, no interrumpible). Si no se reconoce a la
+persona, `target_person_ids` va vacío.
 
 ```yaml
 mission:
   mission_id: ''
   mission_type: attend_fall
   description: "Caída detectada en pasillo B"
-  origin: 3                            # ORIGIN_DETECTION
+  origin: 3
   request_id: ''
   requested_by: ''
-  target_person_ids: [patient_pedro]   # vacío si no se reconoció
+  target_person_ids: [patient_pedro]
   target_location: pasillo_b
   priority: 0
   interruptible: false
@@ -464,54 +461,70 @@ mission:
     - {key: track_id, value: track-17}
 ```
 
-**Respuesta** del servicio:
+**Respuestas** del servicio.
+
+Aceptada:
 
 ```yaml
-# Aceptada
 accepted: true
-code: 0                     # CODE_OK
+code: 0
 mission_id: mis-0042
 message: "Registrada con prioridad 2; en cola detrás de 0 misiones"
----
-# Rechazada: un paciente (verificado) pide dispensar vitaminas
+```
+
+Rechazada porque un paciente verificado pide dispensar vitaminas:
+
+```yaml
 accepted: false
-code: 4                     # CODE_NOT_AUTHORIZED
+code: 4
 mission_id: ''
 message: "dispense_vitamins requiere ROLE_STAFF"
----
-# Rechazada: "Juan" solo identificado por voz (CANDIDATE)
+```
+
+Rechazada porque "Juan" solo fue identificado por voz (`IDENTITY_CANDIDATE`):
+
+```yaml
 accepted: false
-code: 5                     # CODE_IDENTITY_NOT_VERIFIED
+code: 5
 mission_id: ''
 message: "Identidad no verificada; acérquese a la cámara"
----
-# Rechazada: la verificación caducó antes de registrar
+```
+
+Rechazada porque la verificación caducó antes de registrar:
+
+```yaml
 accepted: false
-code: 9                     # CODE_IDENTITY_EXPIRED
+code: 9
 mission_id: ''
 message: "Verificación de req-0001 vencida; repita la orden"
----
-# Rechazada: requested_by no coincide con la persona verificada
+```
+
+Rechazada porque `requested_by` no coincide con la persona verificada:
+
+```yaml
 accepted: false
-code: 10                    # CODE_IDENTITY_MISMATCH
+code: 10
 mission_id: ''
 message: "requested_by=staff_juan pero se verificó a patient_pedro"
 ```
 
-### 6.3 Ejecución (`ExecuteMission`, `MissionStatus`, `RobotActivity`, `Alert`, `SpeakText`)
+### 6.3 Ejecución (`ExecuteMission`, `MissionStatus`, `RobotActivity`, `Alert`, `AckAlert`, `CancelMission`, `GetPerson`, `SpeakText`)
 
-**`ExecuteMission`**: feedback durante la ejecución y resultado final.
+**`ExecuteMission`**: feedback durante la ejecución.
 
 ```yaml
-# Feedback
-state: 2                    # STATE_EXECUTING (constantes de MissionStatus)
+state: 2
 current_step: "Buscando a patient_pedro"
 progress: 0.5
----
-# Result
-success: false              # solo true si state es STATE_COMPLETED
-state: 5                    # STATE_PARTIAL
-code: 20                    # CODE_PERSON_NOT_FOUND
+```
+
+**`ExecuteMission`**: resultado final parcial (Pedro no fue encontrado; `success`
+solo es `true` cuando el estado es `STATE_COMPLETED`).
+
+```yaml
+success: false
+state: 5
+code: 20
 detail: "patient_pedro no encontrado"
 completed_targets: [patient_maria]
 failed_targets: [patient_pedro]
@@ -523,74 +536,80 @@ failed_targets: [patient_pedro]
 header: {stamp: now, frame_id: ''}
 mission_id: mis-0042
 mission_type: dispense_vitamins
-state: 5                    # STATE_PARTIAL
-code: 20                    # CODE_PERSON_NOT_FOUND
+state: 5
+code: 20
 detail: "patient_pedro no encontrado tras recorrer todas las zonas"
 preempted_by: ''
 progress: 1.0
 current_target: ''
 completed_targets: [patient_maria]
 failed_targets: [patient_pedro]
-started:  {sec: 1795000000, nanosec: 0}
+started: {sec: 1795000000, nanosec: 0}
 finished: {sec: 1795000600, nanosec: 0}
 ```
 
-**`MissionStatus`**: pausada por una caída.
+**`MissionStatus`**: pausada por la misión de caída `mis-0050`.
 
 ```yaml
 header: {stamp: now, frame_id: ''}
 mission_id: mis-0042
 mission_type: dispense_vitamins
-state: 3                    # STATE_PAUSED
-code: 21                    # CODE_PREEMPTED
+state: 3
+code: 21
 detail: "Pausada por emergencia"
-preempted_by: mis-0050      # la misión attend_fall
+preempted_by: mis-0050
 progress: 0.5
 current_target: ''
 completed_targets: [patient_maria]
 failed_targets: []
-started:  {sec: 1795000000, nanosec: 0}
+started: {sec: 1795000000, nanosec: 0}
 finished: {sec: 0, nanosec: 0}
 ```
 
-**`RobotActivity`**: buscando a un paciente / bailando.
+**`RobotActivity`**: buscando a un paciente durante una misión de cuidado.
 
 ```yaml
 header: {stamp: now, frame_id: ''}
-mode: 1                     # MODE_MISSION
+mode: 1
 mission_id: mis-0042
 mission_type: dispense_vitamins
 target_person_id: patient_pedro
-activity: 2                 # ACTIVITY_SEARCHING_PERSON
+activity: 2
 description: "Revisando habitación 3"
----
+```
+
+**`RobotActivity`**: bailando durante una interacción social.
+
+```yaml
 header: {stamp: now, frame_id: ''}
-mode: 2                     # MODE_SOCIAL
+mode: 2
 mission_id: mis-0043
 mission_type: dance
 target_person_id: patient_maria
-activity: 7                 # ACTIVITY_DANCING
+activity: 7
 description: "Bailando con María (quedan 80 s)"
 ```
 
-**`Alert`**: emergencia por caída / informe de misión.
+**`Alert`**: emergencia por caída; se repite hasta recibir `AckAlert`.
 
 ```yaml
-# Emergencia
 header: {stamp: now, frame_id: map}
 alert_id: alt-0100
-level: 2                    # LEVEL_EMERGENCY
+level: 2
 mission_id: mis-0050
 about_person_id: patient_pedro
 notify_person_id: staff_ana
 location: pasillo_b
 text: "Caída detectada. Pedro en el suelo, no responde."
-requires_ack: true          # se repite hasta AckAlert
----
-# Informe (persona no encontrada)
+requires_ack: true
+```
+
+**`Alert`**: informe de persona no encontrada.
+
+```yaml
 header: {stamp: now, frame_id: ''}
 alert_id: alt-0101
-level: 1                    # LEVEL_WARNING
+level: 1
 mission_id: mis-0042
 about_person_id: patient_pedro
 notify_person_id: staff_juan
@@ -599,40 +618,43 @@ text: "No encontré a Pedro para darle la vitamina C."
 requires_ack: false
 ```
 
-**`AckAlert`**: Ana confirma que atendió la caída.
+**`AckAlert`**: Ana, verificada con `req-0031`, confirma que atendió la caída.
 
 ```yaml
 alert_id: alt-0100
-request_id: req-0031        # Ana se verificó al confirmar
+request_id: req-0031
 acknowledged_by: staff_ana
 note: "Pedro atendido, sin lesiones"
 ```
 
-**`CancelMission`**: Juan cancela la entrega de vitaminas.
+**`CancelMission`**: Juan, verificado con `req-0040`, cancela la entrega de vitaminas.
 
 ```yaml
 mission_id: mis-0042
-request_id: req-0040        # nueva verificación para esta acción
+request_id: req-0040
 requested_by: staff_juan
 reason: "María ya tomó la vitamina en el desayuno"
 ```
 
+Respuesta:
+
 ```yaml
-# Respuesta
 accepted: true
-code: 0                     # CODE_OK
+code: 0
 message: "Misión mis-0042 cancelada"
 ```
 
-**`GetPerson`**: consultar el rol de quien habla.
+**`GetPerson`**: consultar el rol de una persona.
 
 ```yaml
-# Petición
 person_id: staff_juan
----
-# Respuesta
+```
+
+Respuesta:
+
+```yaml
 found: true
-person: {person_id: staff_juan, display_name: Juan, role: 2}   # ROLE_STAFF
+person: {person_id: staff_juan, display_name: Juan, role: 2}
 ```
 
 **`SpeakText`**: objetivo de la acción.
@@ -646,24 +668,25 @@ interruptible: true
 
 ### 6.4 Estado del robot (`SystemStatus`, `PowerStatus`)
 
-**`SystemStatus`**: funcionando con la cámara caída.
+**`SystemStatus`**: funcionando con la cámara frontal caída.
 
 ```yaml
 header: {stamp: now, frame_id: ''}
-state: 4                    # STATE_DEGRADED
+state: 4
 failed_components: [camera_front]
 detail: "Sin cámara frontal: no puede identificar personas"
 ```
 
-**`PowerStatus`**: batería baja.
+**`PowerStatus`**: batería baja. `batteries` lleva un `sensor_msgs/BatteryState`
+por batería.
 
 ```yaml
 header: {stamp: now, frame_id: ''}
-batteries: []               # sensor_msgs/BatteryState de cada batería
+batteries: []
 charge_cycles: [312, 298]
 total_percentage: 0.18
 estimated_runtime_s: 1500.0
-level: 2                    # LEVEL_LOW
+level: 2
 docked: false
 charging: false
 needs_charge: true
@@ -679,35 +702,43 @@ No es un archivo de parámetros de ROS (contiene listas de objetos).
 personas:
   - person_id: staff_juan
     display_name: Juan
-    role: 2                 # ROLE_STAFF
+    role: 2
   - person_id: staff_ana
     display_name: Ana
     role: 2
   - person_id: patient_maria
     display_name: María
-    role: 1                 # ROLE_PATIENT
+    role: 1
   - person_id: patient_pedro
     display_name: Pedro
     role: 1
   - person_id: admin_chino
     display_name: Administrador
-    role: 3                 # ROLE_ADMIN
+    role: 3
 ```
 
 ### 6.6 Parámetros de nodos (`config/*.yaml`)
 
 **`mission_manager.yaml`**
 
+| Parámetro | Significado |
+|---|---|
+| `social_max_duration_s` | Tiempo máximo de baile o charla |
+| `search_timeout_s` | Cuánto buscar a una persona antes de darla por no encontrada |
+| `clarification_timeout_s` | Espera máxima de la respuesta a una aclaración |
+| `default_report_to` | Destinatario del informe si la misión no indica `report_to` |
+| `priorities` | Prioridad de cada `mission_type` |
+| `min_role` | Rol mínimo para pedir cada `mission_type` |
+
 ```yaml
 mission_manager:
   ros__parameters:
     personas_file: personas.yaml
-    social_max_duration_s: 120.0        # tiempo máximo de baile/charla
-    search_timeout_s: 600.0             # cuánto buscar antes de dar por no encontrado
+    social_max_duration_s: 120.0
+    search_timeout_s: 600.0
     clarification_timeout_s: 20.0
-    default_report_to: staff_ana        # si la misión no indica report_to
-
-    priorities:                         # mission_type -> prioridad
+    default_report_to: staff_ana
+    priorities:
       attend_fall: 1
       attend_help_request: 1
       dispense_vitamins: 2
@@ -717,10 +748,9 @@ mission_manager:
       dance: 3
       chat: 3
       go_charge: 4
-
-    min_role:                           # rol mínimo para pedir cada misión
-      attend_help_request: 1            # paciente (o identidad candidata)
-      dispense_vitamins: 2              # personal
+    min_role:
+      attend_help_request: 1
+      dispense_vitamins: 2
       deliver_item: 2
       reminder_round: 1
       dance: 1
@@ -729,41 +759,64 @@ mission_manager:
 
 **`identity_manager.yaml`** (componente de identificación)
 
+| Parámetro | Significado |
+|---|---|
+| `verification_ttl_s` | Vigencia de una verificación: `valid_until` = verificación + este tiempo |
+| `min_confidence_verified` | Por debajo de esta confianza la identidad queda en `IDENTITY_CANDIDATE` |
+| `accepted_methods` | Métodos que pueden dar `IDENTITY_VERIFIED`: cara, cara y voz, tarjeta (solo voz no basta) |
+| `cleanup_period_s` | Cada cuánto se borran las verificaciones caducadas |
+
 ```yaml
 identity_manager:
   ros__parameters:
-    verification_ttl_s: 60.0           # valid_until = verificación + 60 s
-    min_confidence_verified: 0.90      # por debajo -> IDENTITY_CANDIDATE
-    accepted_methods: [1, 3, 4]        # FACE, FACE_AND_VOICE, BADGE (solo voz no verifica)
-    cleanup_period_s: 10.0             # borra verificaciones caducadas
+    verification_ttl_s: 60.0
+    min_confidence_verified: 0.90
+    accepted_methods: [1, 3, 4]
+    cleanup_period_s: 10.0
 ```
 
 **`power_manager.yaml`**
 
+| Parámetro | Significado |
+|---|---|
+| `low_threshold` | Por debajo de este porcentaje → `LEVEL_LOW` |
+| `critical_threshold` | Por debajo de este porcentaje → `LEVEL_CRITICAL` |
+| `max_charge_cycles` | A partir de estos ciclos → `needs_replacement` |
+| `publish_rate_hz` | Frecuencia de publicación de `PowerStatus` |
+
 ```yaml
 power_manager:
   ros__parameters:
-    low_threshold: 0.25                 # < 25 % -> LEVEL_LOW
-    critical_threshold: 0.10            # < 10 % -> LEVEL_CRITICAL
-    max_charge_cycles: 500              # needs_replacement
+    low_threshold: 0.25
+    critical_threshold: 0.10
+    max_charge_cycles: 500
     publish_rate_hz: 1.0
 ```
 
-### 7 Diagramas y archivos ⏳ pendientes
+### 6.7 Constantes usadas
 
-| # | Dónde | Problema | Propuesta |
-|---|---|---|---|
-| C1 | `Diagrama_sistem.png` | La tercera rama dice `READY (manager acepta misiones)` pero lleva a "Alert + manager rechaza todo" | Cambiarla a `ERROR` |
-| C2 | `Diagrama_sistem.png` | Dice `CHEAK` | `CHECK` |
-| C3 | `Diagrama_personal.png` | Pone `UserCommand ROLE_...`, pero el rol está en `Person`, no en `UserCommand`; falta `ROLE_ADMIN` | Cambiar las cajas a `Person.role` y añadir `ROLE_ADMIN` |
-| C4 | `Diagrama_baterias.png` | `power_manager` aparece como `BOOTING` | Quitar `BOOTING` (es un estado de `SystemStatus`) |
-| C5 | `Diagrama_baterias.png` | `go_charge` en prioridad 1 compite con una caída | Ver la decisión pendiente en la [sección 5](#5-baterías-y-carga) |
-| C6 | `diagrama_mensajes_orden.jpg` | Falta la flecha de vuelta: la respuesta a la aclaración regresa como `UserCommand` | Añadir la flecha `SpeakText → usuario → UserCommand` |
-
+| Campo | Valor | Constante |
+|---|---|---|
+| `UserCommand.modality` | 2 | `MODALITY_VOICE` |
+| `identity_status` | 0 / 1 / 2 | `IDENTITY_UNKNOWN` / `IDENTITY_CANDIDATE` / `IDENTITY_VERIFIED` |
+| `IdentityVerification.method` | 1 / 2 / 3 / 4 | `METHOD_FACE` / `METHOD_VOICE` / `METHOD_FACE_AND_VOICE` / `METHOD_BADGE` |
+| `ClarificationRequest.reason` | 2 | `REASON_MISSING_PARAMETER` |
+| `CommandEvent.state` | 4 / 5 | `STATE_REGISTERED` / `STATE_REJECTED` |
+| `MissionSpec.origin` | 1 / 2 / 3 / 4 | `ORIGIN_STAFF` / `ORIGIN_PATIENT` / `ORIGIN_DETECTION` / `ORIGIN_SCHEDULE` |
+| `MissionSpec.priority` | 0 | `PRIORITY_UNSET` |
+| `RegisterMission.code` | 0 / 4 / 5 / 9 / 10 | `CODE_OK` / `CODE_NOT_AUTHORIZED` / `CODE_IDENTITY_NOT_VERIFIED` / `CODE_IDENTITY_EXPIRED` / `CODE_IDENTITY_MISMATCH` |
+| `MissionStatus.state` | 2 / 3 / 5 | `STATE_EXECUTING` / `STATE_PAUSED` / `STATE_PARTIAL` |
+| `MissionStatus.code` | 20 / 21 | `CODE_PERSON_NOT_FOUND` / `CODE_PREEMPTED` |
+| `RobotActivity.mode` | 1 / 2 | `MODE_MISSION` / `MODE_SOCIAL` |
+| `RobotActivity.activity` | 2 / 7 | `ACTIVITY_SEARCHING_PERSON` / `ACTIVITY_DANCING` |
+| `Alert.level` | 1 / 2 | `LEVEL_WARNING` / `LEVEL_EMERGENCY` |
+| `SystemStatus.state` | 4 | `STATE_DEGRADED` |
+| `PowerStatus.level` | 2 | `LEVEL_LOW` |
+| `Person.role` | 1 / 2 / 3 | `ROLE_PATIENT` / `ROLE_STAFF` / `ROLE_ADMIN` |
 
 ---
 
-## 8. Inventario de interfaces
+## 7. Inventario de interfaces
 
 ### Mensajes (`msg/`)
 
@@ -799,7 +852,7 @@ power_manager:
 | `ExecuteMission.action` | Ejecuta una misión registrada, con feedback de progreso |
 | `SpeakText.action` | Hace hablar al robot (TTS), cancelable |
 
-### Topics, servicios y acciones sugeridos
+### Topics, servicios y acciones
 
 | Nombre | Tipo | Publica / sirve |
 |---|---|---|
@@ -818,5 +871,3 @@ power_manager:
 | `/uvix/system_status` | `SystemStatus` | Supervisor |
 | `/uvix/power_status` | `PowerStatus` | `power_manager` |
 | `/uvix/speak` | `SpeakText` (action) | Nodo TTS |
-
----

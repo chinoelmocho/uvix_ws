@@ -33,7 +33,21 @@ Para entender el diseño, conviene leer en este orden:
 ## 2. Catálogo de capacidades
 
 Detalle completo (entradas, QoS, parámetros, todos los fallos) en
-[`m1_capacidades.yaml`](m1_capacidades.yaml). Resumen:
+[`m1_capacidades.yaml`](m1_capacidades.yaml).
+
+| Campo del catálogo | Significado |
+|---|---|
+| `nombre_ros` / `clase` / `tipo` | Topic, servicio o acción; su clase y su tipo ROS 2 completo |
+| `timeout_s` | Tiempo máximo que el consumidor espera antes de declarar fallo |
+| `version` | Versión del contrato (no del modelo); sube con cambios incompatibles |
+| `estado_interfaz` | `existe` (en `uvix_interfaces`) o `propuesta` (aún no creada) |
+| `alcance_m1` | Lo que se entrega al cerrar M1: `implementado`, `simulado`, `solo_contrato` o `fuera_de_m1` |
+| `detalle_*` | Aclaración del campo con el mismo nombre |
+
+Las marcas de tiempo usan `/clock` en simulación (`use_sim_time: true`) y el reloj
+del sistema en el robot real. Unidades SI (s, m, rad).
+
+Resumen:
 
 | Capacidad | Salida principal (nombre ROS · tipo) | Responsable | Consumidores | Timeout | Alcance M1 |
 |---|---|---|---|---|---|
@@ -193,7 +207,7 @@ Sin errores ni advertencias.
 
 ```bash
 source install/setup.bash
-ros2 interface package uvix_interfaces | wc -l     # -> 19
+ros2 interface package uvix_interfaces | wc -l
 ros2 interface package uvix_interfaces | sort
 ```
 
