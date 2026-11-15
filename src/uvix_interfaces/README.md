@@ -747,40 +747,7 @@ power_manager:
     publish_rate_hz: 1.0
 ```
 
----
-
-## 7. Anomalías encontradas
-
-### 7.1 Errores de compilación ✅ resueltos
-
-| # | Dónde | Problema | Arreglo aplicado |
-|---|---|---|---|
-| A1 | `MissionSpec`, `RegisterMission`, `ExecuteMission` | Usaban `uvix_interface/...` (sin la *s*) | Ahora `uvix_interfaces/...` |
-| A2 | `MissionSpec.msg` | `uint8 priority` declarado dos veces | Un solo campo, debajo de las constantes `PRIORITY_` |
-| A3 | `CMakeLists.txt` | Faltaban los `find_package` antes de `rosidl_generate_interfaces` | Añadidos `rosidl_default_generators`, `std_msgs`, `builtin_interfaces`, `sensor_msgs`, `action_msgs` y `ament_export_dependencies(rosidl_default_runtime)` |
-| A4 | `CMakeLists.txt` | 6 mensajes no se generaban | Ahora se generan las 17 interfaces |
-| A5 | `package.xml` / CMake | Faltaba `sensor_msgs` (luego quedó duplicado) | Una sola `<depend>sensor_msgs</depend>` + en `DEPENDENCIES` |
-
-### 7.2 Inconsistencias de diseño ✅ resueltas
-
-| # | Dónde | Problema | Solución aplicada |
-|---|---|---|---|
-| B1 | `RobotActivity.mode` | Apuntaba a constantes que no existían | Constantes propias `MODE_IDLE/MISSION/SOCIAL/EMERGENCY/CHARGING` |
-| B2 | `RobotActivity` | Faltaban actividades | `ACTIVITY_DANCING`, `DISPENSING`, `DELIVERING`, `CHARGING`, `ATTENDING_EMERGENCY` (7–11) |
-| B3 | `ExecuteMission` feedback | Usaba estados de `CommandEvent` | Usa las constantes `STATE_` de `MissionStatus` |
-| B4 | `ExecuteMission` result | Solo `success` | Añadidos `state`, `completed_targets`, `failed_targets` |
-| B5 | `MissionStatus.code` | Sin códigos de ejecución | `CODE_PERSON_NOT_FOUND=20`, `PREEMPTED=21`, `TIMEOUT=22`, `LOW_BATTERY=23`, `NAVIGATION_FAILED=24` (empiezan en 20 para no chocar con los de `RegisterMission`) |
-| B6 | `MissionStatus` | No se sabía quién la pausó | `string preempted_by` |
-| B7 | `MissionSpec` | Sin hora de inicio | `builtin_interfaces/Time start_time` (cero = ya) |
-| B8 | `MissionSpec.mission_type` | Texto libre | Constantes `TYPE_*` con el catálogo; el manager valida → `CODE_UNKNOWN_MISSION_TYPE` |
-| B9 | `MissionSpec` | `requested_by` solo dice quién **declara** ser; con eso el manager podría aceptar una orden basada en una hipótesis de identidad | Se separan los 3 datos: `person_id` + `identity_status` vienen de `IdentityVerification` (componente confiable), enlazada por `request_id` y consultada con `GetRequestIdentity`, con caducidad (`valid_until`) y un solo uso; el `role` se consulta con `GetPerson`. `UserCommand.identity_status` queda como pista informativa. `CancelMission` y `AckAlert` llevan también `request_id`. Nuevos códigos `CODE_IDENTITY_EXPIRED` y `CODE_IDENTITY_MISMATCH` (sección 3) |
-| B10 | `Alert` | Sin confirmación | `bool requires_ack` + `srv/AckAlert.srv` |
-| B11 | Cancelar | Sin forma de cancelar | `srv/CancelMission.srv` |
-| B12 | `Person.msg` | No se usaba | `srv/GetPerson.srv` lo devuelve |
-| B13 | `package.xml` | `description` en `TODO` | Descripción real |
-| B14 | `ClarificationRequest` | Sin mensaje de respuesta | Comentario en el `.msg`: la respuesta es un nuevo `UserCommand` con el mismo `session_id` |
-
-### 7.3 Diagramas y archivos ⏳ pendientes
+### 7 Diagramas y archivos ⏳ pendientes
 
 | # | Dónde | Problema | Propuesta |
 |---|---|---|---|
@@ -790,7 +757,7 @@ power_manager:
 | C4 | `Diagrama_baterias.png` | `power_manager` aparece como `BOOTING` | Quitar `BOOTING` (es un estado de `SystemStatus`) |
 | C5 | `Diagrama_baterias.png` | `go_charge` en prioridad 1 compite con una caída | Ver la decisión pendiente en la [sección 5](#5-baterías-y-carga) |
 | C6 | `diagrama_mensajes_orden.jpg` | Falta la flecha de vuelta: la respuesta a la aclaración regresa como `UserCommand` | Añadir la flecha `SpeakText → usuario → UserCommand` |
-| C7 | `imagenes/*:Zone.Identifier` | Archivos basura de Windows al copiar a WSL | Borrarlos y añadir `*:Zone.Identifier` al `.gitignore` |
+
 
 ---
 
@@ -851,20 +818,3 @@ power_manager:
 | `/uvix/speak` | `SpeakText` (action) | Nodo TTS |
 
 ---
-
-## 9. Compilar
-
-```bash
-cd ~/uvix_ws
-colcon build --packages-select uvix_interfaces
-source install/setup.bash
-ros2 interface list | grep uvix_interfaces
-ros2 interface show uvix_interfaces/msg/MissionSpec
-```
-
-Probar un ejemplo:
-
-```bash
-ros2 topic pub --once /uvix/user_command uvix_interfaces/msg/UserCommand "$(cat user_command.yaml)"
-ros2 topic echo /uvix/command_events
-```
