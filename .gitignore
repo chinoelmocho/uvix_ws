@@ -17,7 +17,7 @@ images/
 .vscode/browse.vc.db*
 .vscode/ipch/
 src/**/.vscode/
-
+/.vscode/browse.vc.db*
 # --- Python ---
 __pycache__/
 *.pyc
