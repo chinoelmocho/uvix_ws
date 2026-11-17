@@ -1,0 +1,13 @@
+uint8 HAND_RAISED=1
+uint8 WAVE=2
+uint8 HELP_SIGN=3
+std_msgs/Header header
+string event_id
+string source_id
+string tracker_session_id
+string track_id
+uint8 gesture
+float32 quality
+builtin_interfaces/Duration persistence
+builtin_interfaces/Duration valid_for
+string deduplication_key
