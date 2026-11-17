@@ -1,0 +1,10 @@
+uint8 CANDIDATE=1
+uint8 KNOWN=2
+uint8 UNKNOWN=3
+uint8 INSUFFICIENT_QUALITY=4
+string track_id
+string face_observation_id
+string person_id
+uint8 status
+float32 match_confidence
+float32 face_quality

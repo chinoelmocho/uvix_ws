@@ -1,0 +1,7 @@
+gesture_policy:
+  vocabulary: [HAND_RAISED, WAVE, HELP_SIGN]
+  minimum_persistence_seconds: 0.5
+  deduplicate_while_held: true
+  event_key_fields: [tracker_session_id, track_id, gesture]
+  release_required_before_repeat: true
+  source: synthetic_fixture

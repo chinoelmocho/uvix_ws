@@ -12,6 +12,7 @@ find_package(std_msgs REQUIRED)
 find_package(builtin_interfaces REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(action_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   # Mensajes
@@ -27,6 +28,16 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/SystemStatus.msg"
   "msg/PowerStatus.msg"
   "msg/IdentityVerification.msg"
+  # M1-03 visual observation contracts
+  "msg/ImageBox.msg"
+  "msg/PersonObservation.msg"
+  "msg/PeopleObservations.msg"
+  "msg/BodyKeypoint.msg"
+  "msg/BodyPose.msg"
+  "msg/BodyPoseArray.msg"
+  "msg/FaceMatch.msg"
+  "msg/FaceMatchArray.msg"
+  "msg/GestureEvent.msg"
   # Servicios
   "srv/RegisterMission.srv"
   "srv/CancelMission.srv"
@@ -36,7 +47,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   # Acciones
   "action/ExecuteMission.action"
   "action/SpeakText.action"
-  DEPENDENCIES std_msgs builtin_interfaces sensor_msgs action_msgs
+  DEPENDENCIES std_msgs builtin_interfaces sensor_msgs action_msgs geometry_msgs
 )
 
 ament_export_dependencies(rosidl_default_runtime)
