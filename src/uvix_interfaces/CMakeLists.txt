@@ -27,6 +27,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/SystemStatus.msg"
   "msg/PowerStatus.msg"
   "msg/IdentityVerification.msg"
+  # M1-04 speech contracts
+  "msg/SpeechTranscript.msg"
   # Servicios
   "srv/RegisterMission.srv"
   "srv/CancelMission.srv"
@@ -36,6 +38,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   # Acciones
   "action/ExecuteMission.action"
   "action/SpeakText.action"
+  "action/Listen.action"
+  "action/Speak.action"
   DEPENDENCIES std_msgs builtin_interfaces sensor_msgs action_msgs
 )
 
