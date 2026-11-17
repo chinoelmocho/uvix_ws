@@ -1,0 +1,16 @@
+# Half-duplex TTS request. A backend may report audio_available=false in status.
+string request_id
+string text
+string language
+bool interruptible
+---
+uint16 RESULT_COMPLETED=0
+uint16 RESULT_CANCELED=1
+uint16 RESULT_BACKEND_UNAVAILABLE=2
+uint16 RESULT_LANGUAGE_UNSUPPORTED=3
+uint16 RESULT_ERROR=4
+uint16 result_code
+string detail
+bool audio_available
+---
+float32 progress

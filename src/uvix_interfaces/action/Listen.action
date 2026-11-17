@@ -1,0 +1,28 @@
+# Half-duplex listening request. timeout_sec bounds the whole request.
+string request_id
+string language
+string microphone_id
+uint32 sample_rate_hz
+uint8 channels
+string encoding
+uint16 frame_duration_ms
+bool vad_enabled
+float32 timeout_sec
+float32 phrase_end_silence_sec
+bool include_partial_transcript
+---
+uint8 RESULT_RECOGNIZED=0
+uint8 RESULT_SILENCE=1
+uint8 RESULT_TIMEOUT=2
+uint8 RESULT_BACKEND_UNAVAILABLE=3
+uint8 RESULT_ERROR=4
+uint8 RESULT_CANCELED=5
+uint8 result_code
+uvix_interfaces/SpeechTranscript transcript
+string detail
+---
+uint8 STATE_WAITING=0
+uint8 STATE_SPEECH_DETECTED=1
+uint8 STATE_TRANSCRIBING=2
+uint8 state
+string partial_text
