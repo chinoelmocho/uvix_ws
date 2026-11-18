@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -75,13 +76,17 @@ WSGI_APPLICATION = 'uvix_data_project.wsgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 # Datos persistentes fuera del código y de las carpetas de compilación.
-DATA_DIR = Path.home() / ".local" / "share" / "uvix"
+# UVIX_DATA_DB permite usar otra base (p. ej. una temporal de prueba);
+# si no está definida se usa la ruta habitual.
+DEFAULT_DB_PATH = Path.home() / ".local" / "share" / "uvix" / "uvix.sqlite3"
+DB_PATH = Path(os.environ.get("UVIX_DATA_DB") or DEFAULT_DB_PATH).expanduser()
+DATA_DIR = DB_PATH.parent
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": DATA_DIR / "uvix.sqlite3",
+        "NAME": DB_PATH,
     }
 }
 
