@@ -1,0 +1,47 @@
+// Arquitectura de uvix_data. Generar con:
+//   dot -Tpng -Gdpi=150 arquitectura_get_person.dot -o arquitectura_get_person.png
+digraph arquitectura {
+  graph [rankdir=LR, fontname="DejaVu Sans", fontsize=13, nodesep=0.45, ranksep=0.7,
+         labelloc=t, label="uvix_data: cómo se responde /uvix/get_person\n ", bgcolor=white, pad=0.3];
+  node  [fontname="DejaVu Sans", fontsize=11, shape=box, style="rounded,filled", fillcolor="#ffffff", color="#555555", margin="0.18,0.10"];
+  edge  [fontname="DejaVu Sans", fontsize=10, color="#555555"];
+
+  subgraph cluster_clientes {
+    label="Clientes ROS 2 (otros procesos)"; style="rounded,dashed"; color="#888888"; fontsize=11;
+    manager     [label="mission_manager\n¿el rol permite la misión?", fillcolor="#e8f0fe"];
+    interpreter [label="command_interpreter", fillcolor="#e8f0fe"];
+    cli         [label="ros2 service call\n(prueba manual)", fillcolor="#e8f0fe"];
+  }
+
+  servicio [label="/uvix/get_person\nuvix_interfaces/srv/GetPerson", shape=box, style="filled", fillcolor="#fff4d6", color="#c79a1e"];
+
+  subgraph cluster_nodo {
+    label="Proceso del nodo  ·  ros2 run uvix_data uvix_data_node"; style="rounded,filled"; fillcolor="#f3f8f1"; color="#5b8c51"; fontsize=11;
+    ros_node [label="people/ros_node.py\nmain(): django.setup() → comprobar_base()\n→ create_service() → rclpy.spin()"];
+    callback [label="people/ros_services.py\nget_person(request, response)"];
+    modelo   [label="people/models.py\nPerson (Django ORM)\nperson_id · display_name · role · active"];
+    settings [label="uvix_data_project/settings.py\nruta de la base", fillcolor="#f7f7f7"];
+  }
+
+  db [label="SQLite\nUVIX_DATA_DB  o, por defecto,\n~/.local/share/uvix/uvix.sqlite3", shape=cylinder, fillcolor="#fde8e8", color="#b34b4b"];
+
+  subgraph cluster_admin {
+    label="Administración (fuera de ROS)"; style="rounded,dashed"; color="#888888"; fontsize=11;
+    migrate [label="python3 -m django migrate\n--settings=uvix_data_project.settings", fillcolor="#f7f7f7"];
+    alta    [label="Alta / edición / desactivación\n(django shell o admin)", fillcolor="#f7f7f7"];
+  }
+
+  manager -> servicio; interpreter -> servicio; cli -> servicio [label="person_id: \"staff_x\""];
+  servicio -> ros_node [label="petición"];
+  ros_node -> callback [label="cada llamada"];
+  callback -> modelo [label="objects.get(person_id=…)"];
+  modelo -> db [label="SELECT"];
+  settings -> modelo [style=dotted, arrowhead=none];
+  settings -> db [style=dotted, label="elige el archivo"];
+  migrate -> db [label="crea el esquema"];
+  alta -> db [label="escribe registros"];
+
+  respuesta [shape=note, fillcolor="#fffbe6", color="#c79a1e", label="Respuesta\nfound=true  + Person (rol, active, preferences=[])\nfound=false + role=ROLE_UNKNOWN (0)\nsin respuesta → base no disponible (timeout)"];
+  callback -> respuesta [style=dashed, color="#c79a1e"];
+  respuesta -> servicio [style=dashed, color="#c79a1e", constraint=false];
+}

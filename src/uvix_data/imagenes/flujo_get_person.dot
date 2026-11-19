@@ -1,0 +1,50 @@
+// Flujo de arranque y de consulta del nodo uvix_data. Generar con:
+//   dot -Tpng -Gdpi=150 flujo_get_person.dot -o flujo_get_person.png
+digraph flujo {
+  graph [rankdir=TB, fontname="DejaVu Sans", fontsize=13, nodesep=0.4, ranksep=0.4,
+         labelloc=t, label="uvix_data: arranque, consulta y cierre\n ", bgcolor=white, pad=0.3, newrank=true];
+  node  [fontname="DejaVu Sans", fontsize=11, shape=box, style="rounded,filled", fillcolor="#ffffff", color="#555555", margin="0.16,0.08"];
+  edge  [fontname="DejaVu Sans", fontsize=10, color="#555555"];
+
+  subgraph cluster_arranque {
+    label="1. Arranque"; style="rounded,filled"; fillcolor="#f3f8f1"; color="#5b8c51";
+    inicio   [label="ros2 run uvix_data uvix_data_node", shape=box, style="filled", fillcolor="#e8f0fe"];
+    setup    [label="django.setup()\nlee settings.py → ruta de la base\nlog: «Base de datos: …»"];
+    existe   [label="¿existe el archivo\nde la base?", shape=diamond, style=filled, fillcolor="#fff4d6", color="#c79a1e"];
+    migr     [label="¿migraciones\npendientes?", shape=diamond, style=filled, fillcolor="#fff4d6", color="#c79a1e"];
+    listo    [label="create_service(/uvix/get_person)\nlog: «Servicio … listo»\nrclpy.spin()", fillcolor="#e6f4ea", color="#2e7d32"];
+    noarr    [label="ERROR en el log\n«Ejecute … migrate»\nNO se ofrece el servicio\nsalida con código 1", fillcolor="#fde8e8", color="#b34b4b"];
+  }
+
+  subgraph cluster_consulta {
+    label="2. Cada consulta"; style="rounded,filled"; fillcolor="#fffdf5"; color="#c79a1e";
+    peticion [label="Llega GetPerson\nperson_id = \"…\"", fillcolor="#e8f0fe"];
+    buscar   [label="Person.objects.get(person_id=…)"];
+    res      [label="¿resultado?", shape=diamond, style=filled, fillcolor="#fff4d6", color="#c79a1e"];
+    found    [label="found = true\nperson_id, display_name, role, active\n(una persona desactivada también\nse encuentra: active = false)\n↺ responde y espera la siguiente", fillcolor="#e6f4ea", color="#2e7d32"];
+    nofound  [label="found = false\nrole = ROLE_UNKNOWN (0)\n↺ responde y espera la siguiente", fillcolor="#fff4d6", color="#c79a1e"];
+    caida    [label="FATAL «Error de base de datos»\nNO responde (el cliente ve timeout)\nsalida con código 1", fillcolor="#fde8e8", color="#b34b4b"];
+  }
+
+  subgraph cluster_cierre {
+    label="3. Cierre"; style="rounded,filled"; fillcolor="#f7f7f7"; color="#888888";
+    cierre [label="Ctrl+C (SIGINT) o SIGTERM\ndestroy_node() + shutdown\nsalida con código 0"];
+  }
+
+  inicio -> setup -> existe;
+  existe -> migr  [label="sí"];
+  existe -> noarr [label="no"];
+  migr -> noarr [label="sí"];
+  migr -> listo [label="no"];
+  listo -> peticion [label="espera peticiones"];
+  peticion -> buscar -> res;
+  res -> found   [label="existe"];
+  res -> nofound [label="no existe"];
+  res -> caida   [label="error de base\n(DatabaseError)"];
+  listo -> cierre [style=dotted, label="señal"];
+
+  regla [shape=note, fillcolor="#fffbe6", color="#c79a1e",
+         label="Regla clave para los consumidores:\nfound = false  significa «persona no registrada».\nSin respuesta significa «registro no disponible»:\nnunca asumir un rol (→ CODE_INTERNAL_ERROR)."];
+  { rank=same; caida; regla; }
+  caida -> regla [style=invis];
+}

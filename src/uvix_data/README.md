@@ -2,7 +2,7 @@
 
 Registro local de personas de UVIX (M1-05). Un nodo ROS 2 ofrece
 `/uvix/get_person` (`uvix_interfaces/srv/GetPerson`) leyendo una base SQLite
-gestionada con Django.
+gestionada con Django. Explicación con diagramas: [FUNCIONAMIENTO.md](FUNCIONAMIENTO.md).
 
 | Petición | Respuesta |
 |---|---|
