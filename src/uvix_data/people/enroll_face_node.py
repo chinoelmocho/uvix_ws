@@ -92,6 +92,10 @@ def main():
         executor.spin()
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except Exception:
+        # Contexto cerrado por SIGTERM mientras el ejecutor esperaba: cierre normal.
+        if rclpy.ok():
+            raise
     finally:
         executor.shutdown(timeout_sec=1.0)
         node.destroy_node()

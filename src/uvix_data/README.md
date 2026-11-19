@@ -5,7 +5,7 @@ Registro local de personas, preferencias, permisos y plantillas faciales de UVIX
 
 | Interfaz | Tipo | Ejecutable | Estado |
 |---|---|---|---|
-| `/uvix/get_person` | `GetPerson` (srv) | `uvix_data_node` | implementado |
+| `/uvix/get_person` | `GetPerson` (srv), con `status` OK / NOT_FOUND / UNAVAILABLE | `uvix_data_node` | implementado |
 | `/uvix/check_permission` | `CheckPermission` (srv) | `uvix_data_node` | implementado |
 | `/uvix/enroll_face` | `EnrollFace` (action) | `uvix_enroll_face_sim` | **simulado** (sin cámara) |
 
@@ -58,13 +58,14 @@ operación concreta (pedir `encargo` → `CODE_UNKNOWN_OPERATION`).
 | Código | Operación | Origen | Ejecutor |
 |---|---|---|---|
 | `deliver_item` | Enviar un encargo a una persona | `MissionSpec.TYPE_DELIVER_ITEM` | contrato de misión; ejecutor pendiente |
-| `reminder_round` | Recordatorios para un grupo en un horario | `MissionSpec.TYPE_REMINDER_ROUND` | contrato de misión; ejecutor pendiente |
+| `reminder_round` | Recordatorios **siempre para un grupo** en un horario | `MissionSpec.TYPE_REMINDER_ROUND` | contrato de misión; ejecutor pendiente |
 | `find_person` | Búsqueda física de una persona | nuevo | solo registrada |
 | `operational_report` | Informe operativo (visitas, avisos, no localizados) | nuevo | solo registrada |
 | `socialize_zone` | Socializar con pacientes en una zona | nuevo (distinto de `dance`/`chat`, que pide el paciente para sí) | solo registrada |
 | `dispense_medication` | Dispensación de medicamentos para un grupo | nuevo (distinto de `dispense_vitamins`). **Solo autorización con datos ficticios; sin dispensación, dosis ni decisiones clínicas** | solo registrada |
 | `list_patients` | Buscar y listar pacientes en el registro | nuevo (independiente de `find_person`). Da el resumen autorizado; notas o mediciones requerirían su propia operación | solo registrada |
-| `attend_help_request` | Pedir ayuda | `MissionSpec` | contrato; ejecutor pendiente |
+| `attend_help_request` | Pedir ayuda (**nunca se deniega**) | `MissionSpec` | contrato; ejecutor pendiente |
+| `personal_reminder` | Recordatorio individual que pide un paciente (P3), sin grupo | `MissionSpec.TYPE_PERSONAL_REMINDER` (nuevo) | contrato de misión; ejecutor pendiente |
 | `dance`, `chat` | Bailar, conversar | `MissionSpec` | contrato; ejecutor pendiente |
 | `dispense_vitamins` | Dispensar vitaminas | `MissionSpec` | contrato; ejecutor pendiente |
 | `enroll_face` | Alta facial guiada | nuevo | `uvix_enroll_face_sim` (simulado) |
@@ -80,44 +81,63 @@ nuevas se añaden con el admin o con `Capability.objects.create(...)`.
 
 ## 4. Matriz de permisos
 
-| Operación | PATIENT | STAFF | ADMIN |
+| Operación | PATIENT | STAFF | ADMIN | Cualquiera, sin condiciones |
+|---|---|---|---|---|
+| `attend_help_request` (pedir ayuda) | sí | sí | sí | **sí, siempre** |
+| Las siete acordadas (`deliver_item` … `list_patients`, incluido `reminder_round` de grupo) | no | **sí** | sí | no |
+| `dance`, `chat`, `personal_reminder` | sí | sí | sí | no |
+| `dispense_vitamins` | no | sí | sí | no |
+| `enroll_face` | no | no (sin concesión) | sí | no |
+| Operación registrada después | solo con concesión | solo con concesión | **sí, de inmediato** | no |
+| Operación no registrada | no | no | **no** | no |
+
+Las concesiones de STAFF son el punto de partida; se amplían con
+`RolePermission` (admin de Django) sin tocar código.
+
+Condiciones comunes (todas las operaciones **salvo pedir ayuda**): identidad
+`VERIFIED` y vigente para ese `request_id` (según el proveedor confiable),
+persona en el registro y `active = true`. Una persona desactivada conserva su
+registro y no autoriza nada. `ROLE_UNKNOWN` no tiene concesiones.
+
+**Pedir ayuda nunca se deniega (seguridad primero).** `attend_help_request`
+devuelve siempre `allowed = true`: `CODE_ALLOWED` si además todo está en regla, o
+`CODE_ALLOWED_HELP` si la identidad es candidata, desconocida o está vencida, si
+la persona está desactivada o no registrada, o si no se pudo consultar la
+identidad o la base. El motivo va en `message` y, si se sabe, quién la pidió en
+`evaluated_person_id`. No es configurable desde la base.
+
+`reminder_round` es siempre un recordatorio para un grupo. Comprobar que el
+`MissionSpec` lleve varios destinatarios o un grupo le corresponde al
+`mission_manager`; el recordatorio individual de un paciente es `personal_reminder`.
+
+## 5. `/uvix/get_person` y `status`
+
+| Situación | `status` | `found` | Qué debe entender el cliente |
 |---|---|---|---|
-| Las siete acordadas (`deliver_item` … `list_patients`) | `reminder_round` sí; el resto no | **sí** | sí |
-| `attend_help_request`, `dance`, `chat` | sí | sí | sí |
-| `dispense_vitamins` | no | sí | sí |
-| `enroll_face` | no | no (sin concesión) | sí |
-| Operación registrada después | solo con concesión | solo con concesión | **sí, de inmediato** |
-| Operación no registrada | no | no | **no** |
+| Persona registrada (activa o no) | 0 `STATUS_OK` | true | Datos completos; si `active=false`, no autoriza nada |
+| `person_id` desconocido o vacío | 1 `STATUS_NOT_FOUND` | false | No está registrada → sin permisos |
+| Base ilegible en marcha | 2 `STATUS_UNAVAILABLE` | false | No se pudo consultar → **nunca asumir un rol** (`CODE_INTERNAL_ERROR`) |
 
-Condiciones comunes: identidad `VERIFIED` y vigente para ese `request_id` (según
-el proveedor confiable), persona en el registro y `active = true`. Una persona
-desactivada conserva su registro y no autoriza nada. `ROLE_UNKNOWN` no tiene
-concesiones.
+Ante un error de base el nodo responde `UNAVAILABLE`, lo registra en el log y
+**sigue en marcha**: cuando la base vuelve a estar disponible, responde de nuevo
+`OK` sin reiniciar. `found` se mantiene por compatibilidad, pero los clientes
+deben mirar `status`, porque `found=false` aparece tanto en `NOT_FOUND` como en `UNAVAILABLE`.
 
-**Excepción de ayuda** (README de `uvix_interfaces` §1.2 y §3.2):
-`attend_help_request` se acepta con `IDENTITY_CANDIDATE` → `CODE_ALLOWED_CANDIDATE_HELP`.
-Solo relaja la verificación: la identidad debe seguir vigente, la persona
-candidata debe estar registrada y activa y su rol debe tener la operación. No es
-configurable desde la base.
-
-> El paciente tiene `reminder_round` porque así está documentado (P3 cuando lo
-> pide un paciente). Limitar ese recordatorio a una persona y sin horario de grupo
-> corresponde al `mission_manager` al construir el `MissionSpec`.
-
-## 5. `/uvix/check_permission`
+## 5b. `/uvix/check_permission`
 
 Petición: `request_id` + `operation`. No acepta rol, `person_id` ni "verificado"
 del cliente: la identidad se pide a `/uvix/get_request_identity` (parámetros
 `identity_service` e `identity_timeout_s`, 2.0 s) y `role`/`active` se leen de la base.
 
-Orden de comprobación y códigos estables (`CheckPermission.srv`):
+Orden de comprobación y códigos estables (`CheckPermission.srv`). Pedir ayuda
+no sigue esta tabla: siempre 0 `ALLOWED` o 1 `ALLOWED_HELP`.
 
 | # | Comprobación | Código si falla |
 |---|---|---|
 | 1 | `request_id` y `operation` presentes | 16 `INVALID_REQUEST` |
 | 2 | Operación registrada | 11 `UNKNOWN_OPERATION` |
 | 3 | El proveedor de identidad responde | 20 `IDENTITY_UNAVAILABLE` |
-| 4 | Existe verificación para ese `request_id`, no es `UNKNOWN`, es `VERIFIED` (o `CANDIDATE` + ayuda) | 12 `IDENTITY_NOT_VERIFIED` |
+| 4 | Existe verificación para ese `request_id` y es `VERIFIED` (`CANDIDATE` o `UNKNOWN` no bastan) | 12 `IDENTITY_NOT_VERIFIED` |
 | 5 | `ahora ≤ valid_until` | 13 `IDENTITY_EXPIRED` |
 | 6 | La persona está en el registro | 14 `PERSON_NOT_FOUND` |
 | 7 | `active = true` | 15 `PERSON_INACTIVE` |
@@ -213,7 +233,7 @@ ros2 run uvix_data uvix_enroll_face_sim
 
 ```bash
 ros2 service call /uvix/get_person uvix_interfaces/srv/GetPerson "{person_id: prueba_staff_juan}"
-# found=True, person=Person(..., role=2, active=True, preferences=[KeyValue(key='form_of_address', value='usted'), KeyValue(key='language', value='es')])
+# status=0, found=True, person=Person(..., role=2, active=True, preferences=[KeyValue(key='form_of_address', value='usted'), KeyValue(key='language', value='es')])
 
 ros2 service call /uvix/check_permission uvix_interfaces/srv/CheckPermission "{request_id: req-demo-1, operation: deliver_item}"
 # allowed=True, code=0, evaluated_person_id='prueba_staff_juan', evaluated_role=2, identity_status=2
@@ -231,14 +251,15 @@ ros2 action send_goal /uvix/enroll_face uvix_interfaces/action/EnrollFace \
 Con el install cargado y Cyclone DDS. Ninguna toca la base habitual.
 
 ```bash
-# Unitarias (48): GetPerson, preferencias, migración compatible, permisos, EnrollFace
+# Unitarias (51): GetPerson y status, preferencias, migración compatible, permisos, ayuda, EnrollFace
 cd ~/uvix_ws/src/uvix_data
 UVIX_DATA_DB=/tmp/uvix_unit.sqlite3 python3 -m django test people --settings=uvix_data_project.settings
 
-# Extremo a extremo de GetPerson (13 casos): cierre, base sin migrar, error de base
+# Extremo a extremo de GetPerson (15 casos): status, cierre, base sin migrar,
+# error de base en marcha (UNAVAILABLE) y recuperación
 python3 ~/uvix_ws/src/uvix_data/test/validar_get_person.py --domain 77
 
-# Extremo a extremo de preferencias, CheckPermission y EnrollFace (24 casos)
+# Extremo a extremo de preferencias, CheckPermission, ayuda y EnrollFace (32 casos)
 python3 ~/uvix_ws/src/uvix_data/test/validar_permisos.py --domain 79
 
 # Mediciones de GetPerson

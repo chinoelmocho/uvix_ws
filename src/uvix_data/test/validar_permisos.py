@@ -61,6 +61,8 @@ IDENTIDADES.update({
     "r-desconocida": {"person_id": "", "status": U},
     "r-juan-entrega-maria": {"person_id": "prueba_staff_juan", "status": V},
     "r-maria-entrega-juan": {"person_id": "prueba_paciente_maria", "status": V},
+    "r-maria-recordatorio": {"person_id": "prueba_paciente_maria", "status": V},
+    "r-maria-ayuda": {"person_id": "prueba_paciente_maria", "status": V},
     "r-admin-8": {"person_id": "prueba_admin_01", "status": V},
     "r-staff-8a": {"person_id": "prueba_staff_juan", "status": V},
     "r-staff-8b": {"person_id": "prueba_staff_juan", "status": V},
@@ -200,9 +202,10 @@ def main():
                                       "favorite_activity": "baile"},
                               "beto": {"language": "en", "favorite_activity": "ajedrez"}, "juan": {}})
         r = get_person("no_existe_999")
-        v.registrar("GetPerson: inexistente", "found=False role=0",
-                    f"found={r.found} role={r.person.role}" if r else "sin respuesta",
-                    r is not None and not r.found and r.person.role == 0)
+        v.registrar("GetPerson: inexistente", "status=NOT_FOUND(1) found=False role=0",
+                    f"status={r.status} found={r.found} role={r.person.role}" if r else "sin respuesta",
+                    r is not None and r.status == GetPerson.Response.STATUS_NOT_FOUND
+                    and not r.found and r.person.role == 0)
 
         # ---- CheckPermission ----
         res = {op: check(f"r-staff-{op}", op) for op in SIETE}
@@ -213,10 +216,18 @@ def main():
             ("Operación desconocida (ADMIN)", "r-admin-desconocida", "abrir_puertas", R.CODE_UNKNOWN_OPERATION, False),
             ("Usuario desactivado", "r-baja", "chat", R.CODE_PERSON_INACTIVE, False),
             ("Identidad candidata para una entrega", "r-cand-entrega", "deliver_item", R.CODE_IDENTITY_NOT_VERIFIED, False),
-            ("Excepción de ayuda con identidad candidata", "r-cand-ayuda", "attend_help_request", R.CODE_ALLOWED_CANDIDATE_HELP, True),
             ("Identidad vencida", "r-vencida", "deliver_item", R.CODE_IDENTITY_EXPIRED, False),
-            ("Identidad desconocida", "r-desconocida", "attend_help_request", R.CODE_IDENTITY_NOT_VERIFIED, False),
+            ("Identidad desconocida (operación normal)", "r-desconocida", "chat", R.CODE_IDENTITY_NOT_VERIFIED, False),
             ("Petición sin verificación", "r-no-existe", "chat", R.CODE_IDENTITY_NOT_VERIFIED, False),
+            ("Paciente: reminder_round es de grupo", "r-maria-entrega-juan", "reminder_round", R.CODE_NOT_AUTHORIZED, False),
+            ("Paciente: recordatorio individual", "r-maria-recordatorio", "personal_reminder", R.CODE_ALLOWED, True),
+            # Pedir ayuda nunca se deniega
+            ("Ayuda con identidad verificada", "r-maria-ayuda", "attend_help_request", R.CODE_ALLOWED, True),
+            ("Ayuda con identidad candidata", "r-cand-ayuda", "attend_help_request", R.CODE_ALLOWED_HELP, True),
+            ("Ayuda con identidad desconocida", "r-desconocida", "attend_help_request", R.CODE_ALLOWED_HELP, True),
+            ("Ayuda con identidad vencida", "r-vencida", "attend_help_request", R.CODE_ALLOWED_HELP, True),
+            ("Ayuda de persona desactivada", "r-baja", "attend_help_request", R.CODE_ALLOWED_HELP, True),
+            ("Ayuda sin verificación", "r-no-existe", "attend_help_request", R.CODE_ALLOWED_HELP, True),
         ]
         for nombre, rid, op, code, allowed in casos:
             x = check(rid, op)
@@ -288,6 +299,9 @@ def main():
                     "allowed=False code=20 (sin decisión), dentro del timeout",
                     f"{desc(x)} en {dt:.1f} s",
                     x is not None and not x.allowed and x.code == R.CODE_IDENTITY_UNAVAILABLE)
+        x = check("r-maria-ayuda", "attend_help_request")
+        v.registrar("Ayuda con el proveedor de identidad caído", "allowed=True code=1",
+                    desc(x), x is not None and x.allowed and x.code == R.CODE_ALLOWED_HELP)
 
         # ---- Cierre ----
         rc1, rc2 = parar("uvix_data"), parar("enroll")

@@ -12,18 +12,18 @@ digraph flujo {
     setup    [label="django.setup()\nlee settings.py → ruta de la base\nlog: «Base de datos: …»"];
     existe   [label="¿existe el archivo\nde la base?", shape=diamond, style=filled, fillcolor="#fff4d6", color="#c79a1e"];
     migr     [label="¿migraciones\npendientes?", shape=diamond, style=filled, fillcolor="#fff4d6", color="#c79a1e"];
-    listo    [label="create_service(/uvix/get_person)\nlog: «Servicio … listo»\nrclpy.spin()", fillcolor="#e6f4ea", color="#2e7d32"];
+    listo    [label="create_service(/uvix/get_person, /uvix/check_permission)\nlog: «Servicios … listos»\nMultiThreadedExecutor.spin()", fillcolor="#e6f4ea", color="#2e7d32"];
     noarr    [label="ERROR en el log\n«Ejecute … migrate»\nNO se ofrece el servicio\nsalida con código 1", fillcolor="#fde8e8", color="#b34b4b"];
   }
 
   subgraph cluster_consulta {
     label="2. Cada consulta"; style="rounded,filled"; fillcolor="#fffdf5"; color="#c79a1e";
     peticion [label="Llega GetPerson\nperson_id = \"…\"", fillcolor="#e8f0fe"];
-    buscar   [label="Person.objects.get(person_id=…)"];
+    buscar   [label="Person + preferencias permitidas"];
     res      [label="¿resultado?", shape=diamond, style=filled, fillcolor="#fff4d6", color="#c79a1e"];
-    found    [label="found = true\nperson_id, display_name, role, active\n(una persona desactivada también\nse encuentra: active = false)\n↺ responde y espera la siguiente", fillcolor="#e6f4ea", color="#2e7d32"];
-    nofound  [label="found = false\nrole = ROLE_UNKNOWN (0)\n↺ responde y espera la siguiente", fillcolor="#fff4d6", color="#c79a1e"];
-    caida    [label="FATAL «Error de base de datos»\nNO responde (el cliente ve timeout)\nsalida con código 1", fillcolor="#fde8e8", color="#b34b4b"];
+    found    [label="status = OK (0), found = true\nperson_id, display_name, role, active, preferences\n(una persona desactivada también\nse encuentra: active = false)\n↺ responde y espera la siguiente", fillcolor="#e6f4ea", color="#2e7d32"];
+    nofound  [label="status = NOT_FOUND (1), found = false\nrole = ROLE_UNKNOWN (0)\n↺ responde y espera la siguiente", fillcolor="#fff4d6", color="#c79a1e"];
+    caida    [label="status = UNAVAILABLE (2), found = false\nERROR «registro no disponible» en el log\n↺ el nodo sigue en marcha", fillcolor="#fde8e8", color="#b34b4b"];
   }
 
   subgraph cluster_cierre {
@@ -44,7 +44,7 @@ digraph flujo {
   listo -> cierre [style=dotted, label="señal"];
 
   regla [shape=note, fillcolor="#fffbe6", color="#c79a1e",
-         label="Regla clave para los consumidores:\nfound = false  significa «persona no registrada».\nSin respuesta significa «registro no disponible»:\nnunca asumir un rol (→ CODE_INTERNAL_ERROR)."];
+         label="Regla clave para los consumidores:\nmirar status, no solo found.\nNOT_FOUND = «persona no registrada».\nUNAVAILABLE = «registro no disponible»:\nnunca asumir un rol (→ CODE_INTERNAL_ERROR)."];
   { rank=same; caida; regla; }
   caida -> regla [style=invis];
 }

@@ -151,7 +151,7 @@ def describir(resp):
     if resp is None:
         return "sin respuesta (timeout)"
     p = resp.person
-    return (f"found={resp.found} person_id={p.person_id!r} display_name={p.display_name!r} "
+    return (f"status={resp.status} found={resp.found} person_id={p.person_id!r} display_name={p.display_name!r} "
             f"role={p.role} active={p.active} preferences={len(p.preferences)}")
 
 
@@ -229,8 +229,9 @@ def main():
 
         resp = llamar("no_existe_999")
         v.registrar("Identificador inexistente",
-                    "found=False, role=ROLE_UNKNOWN(0)", describir(resp),
-                    resp is not None and not resp.found and resp.person.role == Person.ROLE_UNKNOWN)
+                    "status=NOT_FOUND(1), found=False, role=ROLE_UNKNOWN(0)", describir(resp),
+                    resp is not None and not resp.found and resp.person.role == Person.ROLE_UNKNOWN
+                    and resp.status == GetPerson.Response.STATUS_NOT_FOUND)
 
         resp = llamar("prueba_staff_01")
         v.registrar("preferences de una persona sin preferencias guardadas",
@@ -297,18 +298,24 @@ def main():
         con.execute("ALTER TABLE people_person RENAME TO people_person_oculta")
         con.commit()
         resp = llamar("prueba_staff_01")
-        time.sleep(1.0)
-        rc = v.proc.poll()
+        time.sleep(0.5)
+        vivo = v.proc.poll() is None
         log = v.log()
         v.registrar("Error de almacenamiento en marcha (tabla inaccesible)",
-                    "distinguible de found=False: sin respuesta found=False y error en el log",
-                    f"respuesta={describir(resp)}; código_proceso={rc}; "
-                    f"log menciona error de base={'base de datos' in log or 'no such table' in log}",
-                    (resp is None or resp.found) and ("base de datos" in log or "no such table" in log))
-        v.detener(signal.SIGINT)
+                    "status=UNAVAILABLE(2), nunca NOT_FOUND; error en el log; el nodo sigue vivo",
+                    f"respuesta={describir(resp)}; nodo_vivo={vivo}; "
+                    f"log menciona registro no disponible={'no disponible' in log}",
+                    resp is not None and resp.status == GetPerson.Response.STATUS_UNAVAILABLE
+                    and not resp.found and vivo and "no disponible" in log)
         con.execute("ALTER TABLE people_person_oculta RENAME TO people_person")
         con.commit()
         con.close()
+        resp = llamar("prueba_staff_01")
+        v.registrar("Recuperación tras el error de almacenamiento",
+                    "el mismo nodo vuelve a responder status=OK", describir(resp),
+                    resp is not None and resp.status == GetPerson.Response.STATUS_OK and resp.found)
+        rc = v.detener(signal.SIGINT)
+        v.registrar("Cierre tras el error", "código 0", f"código {rc}", rc == 0)
 
     finally:
         v.detener(signal.SIGINT)

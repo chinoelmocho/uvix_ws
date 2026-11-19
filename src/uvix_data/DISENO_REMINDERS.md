@@ -7,8 +7,9 @@ migraciones, los servicios ROS y el ejecutor quedan para el siguiente issue.
   `people`. Se relaciona con `people.Person` mediante claves foráneas.
 - Solo usa campos estándar de Django: el paso a PostgreSQL es cambiar
   `DATABASES` y migrar, sin tocar las interfaces ROS.
-- Autorización: programar un recordatorio usa la operación `reminder_round` de
-  `/uvix/check_permission`; leer notas restringidas usaría una operación propia
+- Autorización: un recordatorio para un grupo usa la operación `reminder_round`
+  de `/uvix/check_permission` (personal); el recordatorio individual que pide un
+  paciente usa `personal_reminder` (un solo destinatario, sin grupo); leer notas restringidas usaría una operación propia
   (`read_restricted_notes`), no `list_patients`.
 
 ## 1. Relaciones

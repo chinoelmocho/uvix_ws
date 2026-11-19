@@ -1,4 +1,4 @@
-version_catalogo: 0.1.0
+version_catalogo: 0.2.0
 paquete_interfaces: uvix_interfaces
 distro_ros: humble
 
@@ -47,27 +47,37 @@ capacidades:
       - {nombre_ros: /uvix/perception/person_tracks, tipo: vision_msgs/msg/Detection3DArray}
       - {nombre_ros: /uvix/user_command, tipo: uvix_interfaces/msg/UserCommand, uso: saber qué request_id verificar}
     salida:
-      nombre_ros: /uvix/get_request_identity
-      clase: srv
-      tipo: uvix_interfaces/srv/GetRequestIdentity
-      detalle_tipo: 'devuelve IdentityVerification'
-      estado_interfaz: existe
-      parametros: {verification_ttl_s: 60.0, min_confidence_verified: 0.90}
+      - nombre_ros: /uvix/get_request_identity
+        clase: srv
+        tipo: uvix_interfaces/srv/GetRequestIdentity
+        detalle_tipo: 'devuelve IdentityVerification'
+        estado_interfaz: existe
+        parametros: {verification_ttl_s: 60.0, min_confidence_verified: 0.90}
+      - nombre_ros: /uvix/enroll_face
+        clase: action
+        tipo: uvix_interfaces/action/EnrollFace
+        detalle_tipo: 'alta facial guiada; cancelable; RESULT_LOW_QUALITY / RESULT_INCOMPLETE; solo devuelve template_id, nunca biometría'
+        estado_interfaz: existe
+        parametros: {umbral_calidad: 0.8, max_rechazos: 3, muestras_por_defecto: 5}
     responsable:
       modulo: uvix_perception (identity_manager)
       persona: por asignar
-    consumidores: [mission_manager, command_interpreter]
+    consumidores: [uvix_data (check_permission), mission_manager, command_interpreter]
     timeout_s: 2.0
-    detalle_timeout_s: 'respuesta del servicio'
+    detalle_timeout_s: 'respuesta de GetRequestIdentity; EnrollFace dura lo que tarde la captura'
     fallos:
-      - {condicion: servicio no responde en timeout_s, efecto: RegisterMission CODE_IDENTITY_NOT_VERIFIED}
+      - {condicion: servicio no responde en timeout_s, efecto: "CheckPermission CODE_IDENTITY_UNAVAILABLE (sin decisión) -> RegisterMission CODE_INTERNAL_ERROR; pedir ayuda se acepta igual"}
       - {condicion: sin verificación para ese request_id, efecto: found false -> CODE_IDENTITY_NOT_VERIFIED}
-      - {condicion: confianza menor que el umbral, efecto: IDENTITY_CANDIDATE; solo vale para pedir ayuda}
+      - {condicion: confianza menor que el umbral, efecto: "IDENTITY_CANDIDATE; no autoriza nada (pedir ayuda nunca depende de la identidad)"}
       - {condicion: verificación vencida, efecto: CODE_IDENTITY_EXPIRED}
       - {condicion: rostro no registrado, efecto: IDENTITY_UNKNOWN con person_id vacío}
-    version: 0.1.0
-    alcance_m1: solo_contrato
-    detalle_alcance_m1: 'en M1 la identidad se inyecta (nodo simulado); reconocimiento real en M3 (UVIX-27)'
+      - {condicion: alta facial cancelada, de baja calidad o incompleta, efecto: no se crea ninguna FaceTemplate}
+    version: 0.2.0
+    alcance_m1: simulado
+    detalle_alcance_m1: >
+      Identidad inyectada por un proveedor ficticio (uvix_data/test/identidad_ficticia.py);
+      alta facial simulada sin cámara (ros2 run uvix_data uvix_enroll_face_sim).
+      Reconocimiento y captura reales en M3 (UVIX-27).
     modelo: pendiente
 
   - id: posturas_gestos
@@ -163,27 +173,62 @@ capacidades:
   - id: personas_permisos
     nombre: Registro de personas y permisos
     descripcion: >
-      Registro persistente de personas (person_id) con su rol. Responde qué
-      permisos tiene una persona; NO dice quién está hablando.
+      Registro persistente de personas (person_id) con rol, estado activo y
+      preferencias de interacción, y decisión de permisos por operación.
+      NO dice quién está hablando: la identidad la aporta el componente de rostros.
     entrada:
-      - {archivo: personas.yaml, uso: datos ficticios en M1}
-      - {nombre_ros: /uvix/get_person, clase: srv, tipo: uvix_interfaces/srv/GetPerson, uso: petición}
+      - {archivo: '~/.local/share/uvix/uvix.sqlite3 (UVIX_DATA_DB)', uso: 'base SQLite gestionada con Django; datos ficticios en M1'}
+      - {nombre_ros: /uvix/get_request_identity, clase: srv, tipo: uvix_interfaces/srv/GetRequestIdentity, uso: identidad confiable de cada request_id}
     salida:
-      nombre_ros: /uvix/get_person
-      clase: srv
-      tipo: uvix_interfaces/srv/GetPerson
-      detalle_tipo: 'devuelve Person (person_id, display_name, role)'
-      estado_interfaz: existe
+      - nombre_ros: /uvix/get_person
+        clase: srv
+        tipo: uvix_interfaces/srv/GetPerson
+        detalle_tipo: 'status OK / NOT_FOUND / UNAVAILABLE + Person (person_id, display_name, role, active, preferences permitidas)'
+        estado_interfaz: existe
+      - nombre_ros: /uvix/check_permission
+        clase: srv
+        tipo: uvix_interfaces/srv/CheckPermission
+        detalle_tipo: 'request_id + operation -> allowed + code (0-9 permitido, 10-19 denegado, 20-29 sin decisión)'
+        estado_interfaz: existe
+        parametros: {identity_service: /uvix/get_request_identity, identity_timeout_s: 2.0}
     responsable:
-      modulo: servicio local de datos (people_registry)
+      modulo: uvix_data (uvix_data_node)
       persona: por asignar
-    consumidores: [mission_manager, command_interpreter, uvix_interaction]
+    consumidores: [mission_manager, command_interpreter, uvix_interaction, rostros (enroll_face)]
     timeout_s: 1.0
+    detalle_timeout_s: 'GetPerson; CheckPermission puede tardar hasta 3.0 s porque consulta la identidad (2.0 s)'
     fallos:
-      - {condicion: person_id no existe, efecto: found false, role ROLE_UNKNOWN -> CODE_NOT_AUTHORIZED}
+      - {condicion: person_id no existe, efecto: "status NOT_FOUND, found false, role ROLE_UNKNOWN -> CODE_NOT_AUTHORIZED"}
+      - {condicion: base ilegible en marcha, efecto: "GetPerson status UNAVAILABLE / CheckPermission CODE_STORAGE_UNAVAILABLE; el nodo sigue vivo; el manager responde CODE_INTERNAL_ERROR (nunca asume un rol)"}
       - {condicion: servicio no responde, efecto: el manager rechaza con CODE_INTERNAL_ERROR (nunca asume un rol)}
-      - {condicion: archivo corrupto al arrancar, efecto: "SystemStatus ERROR [people_registry]"}
-    version: 0.1.0
+      - {condicion: base inexistente o sin migrar al arrancar, efecto: "no ofrece servicios, log con la orden migrate y código 1"}
+      - {condicion: pedir ayuda (attend_help_request), efecto: "siempre allowed (CODE_ALLOWED o CODE_ALLOWED_HELP), aunque falle la identidad, el registro o la base"}
+    version: 0.2.0
     alcance_m1: implementado
-    detalle_alcance_m1: 'lectura de personas.yaml con perfiles ficticios (UVIX-15, UVIX-26)'
+    detalle_alcance_m1: >
+      Django + SQLite con personas ficticias (UVIX-15, UVIX-26). Catálogo de
+      operaciones y permisos por rol cargados por la migración 0004. Preparado
+      para PostgreSQL sin cambiar las interfaces.
     modelo: no_aplica
+
+# Operaciones que una persona puede SOLICITAR (Capability en uvix_data).
+# No son capacidades técnicas: cada una se autoriza con /uvix/check_permission.
+# Fuente de verdad: uvix_data/people/migrations/0004_catalogo_inicial.py.
+operaciones_solicitables:
+  - {codigo: deliver_item,        roles: [STAFF],          ejecutor: 'contrato MissionSpec; ejecutor pendiente'}
+  - {codigo: reminder_round,      roles: [STAFF],          ejecutor: 'contrato MissionSpec; ejecutor pendiente', nota: 'siempre para un grupo'}
+  - {codigo: find_person,         roles: [STAFF],          ejecutor: solo registrada}
+  - {codigo: operational_report,  roles: [STAFF],          ejecutor: solo registrada}
+  - {codigo: socialize_zone,      roles: [STAFF],          ejecutor: solo registrada}
+  - {codigo: dispense_medication, roles: [STAFF],          ejecutor: solo registrada, nota: 'solo autorización con datos ficticios; sin dosis ni decisiones clínicas'}
+  - {codigo: list_patients,       roles: [STAFF],          ejecutor: solo registrada}
+  - {codigo: dispense_vitamins,   roles: [STAFF],          ejecutor: 'contrato MissionSpec; ejecutor pendiente'}
+  - {codigo: attend_help_request, roles: [TODOS],          ejecutor: 'contrato MissionSpec; ejecutor pendiente', nota: 'nunca se deniega'}
+  - {codigo: dance,               roles: [PATIENT, STAFF], ejecutor: 'contrato MissionSpec; ejecutor pendiente'}
+  - {codigo: chat,                roles: [PATIENT, STAFF], ejecutor: 'contrato MissionSpec; ejecutor pendiente'}
+  - {codigo: personal_reminder,   roles: [PATIENT, STAFF], ejecutor: 'contrato MissionSpec; ejecutor pendiente', nota: 'recordatorio individual, sin grupo'}
+  - {codigo: enroll_face,         roles: [],               ejecutor: 'uvix_enroll_face_sim (simulado)'}
+# El mission_manager no guarda personas ni roles (sin personas_file ni min_role):
+# consulta /uvix/check_permission con el mission_type como operación.
+# ADMIN activo y verificado puede solicitar cualquier operación registrada.
+# Una operación no registrada se rechaza siempre (CODE_UNKNOWN_OPERATION).

@@ -17,7 +17,8 @@ Las explicaciones de cada mensaje **no se repiten aquí**: están en el
 
 ## 1. Interfaces disponibles
 
-`uvix_interfaces` genera **19 interfaces**: 12 mensajes, 5 servicios y 2 acciones.
+`uvix_interfaces` genera **21 interfaces**: 12 mensajes, 6 servicios y 3 acciones
+(M1-05 añadió `CheckPermission.srv` y `EnrollFace.action`, y `status` en `GetPerson.srv`).
 El inventario completo y los topics sugeridos están en el README
 ([Inventario](../src/uvix_interfaces/README.md#8-inventario-de-interfaces)).
 
@@ -52,13 +53,17 @@ Resumen:
 | Capacidad | Salida principal (nombre ROS · tipo) | Responsable | Consumidores | Timeout | Alcance M1 |
 |---|---|---|---|---|---|
 | **Personas** (detección y seguimiento) | `/uvix/perception/person_tracks` · `vision_msgs/Detection3DArray` *(propuesta)* | `uvix_perception` | rostros, posturas, interacción, manager | 1.0 s | simulado |
-| **Rostros** (identidad) | `/uvix/get_request_identity` · `GetRequestIdentity` | `uvix_perception` (`identity_manager`) | manager, interpreter | 2.0 s | solo contrato |
+| **Rostros** (identidad) | `/uvix/get_request_identity` · `GetRequestIdentity`; `/uvix/enroll_face` · `EnrollFace` (action) | `uvix_perception` (`identity_manager`) | `uvix_data`, manager, interpreter | 2.0 s | simulado (proveedor ficticio y alta sin cámara) |
 | **Posturas / gestos** | `/uvix/register_mission` (caída) · `/uvix/user_command` (gesto) | `uvix_perception` | manager, interpreter | 2.0 s | simulado (gesto fuera, M7) |
 | **Voz de entrada** | `/uvix/user_command` · `UserCommand` | `uvix_interaction` (`asr_node`) | interpreter, rostros | 10.0 s | simulado (texto) |
 | **Voz de salida** | `/uvix/speak` · `SpeakText` (action) | `uvix_interaction` (`tts_node`) | interpreter, manager, ejecutor | 15.0 s | simulado (log) |
-| **Personas / permisos** | `/uvix/get_person` · `GetPerson` | servicio local de datos (`people_registry`) | manager, interpreter, interacción | 1.0 s | implementado (perfiles ficticios) |
+| **Personas / permisos** | `/uvix/get_person` · `GetPerson`; `/uvix/check_permission` · `CheckPermission` | `uvix_data` (Django + SQLite) | manager, interpreter, interacción, rostros | 1.0 s (`CheckPermission` hasta 3.0 s) | implementado (perfiles ficticios) |
 
-Todas las capacidades tienen versión de contrato **0.1.0**. El responsable
+*Rostros* y *Personas / permisos* están en la versión de contrato **0.2.0** (M1-05);
+el resto, en **0.1.0**. Las **operaciones que una persona puede solicitar**
+(`deliver_item`, `reminder_round`, `attend_help_request`...) no son capacidades:
+se listan aparte en `operaciones_solicitables` del YAML y en el
+[README de `uvix_data`](../src/uvix_data/README.md). El responsable
 humano de cada una está **por asignar** (plan, sección 10).
 
 **Fallos comunes.** Si una capacidad no responde dentro de su timeout, el

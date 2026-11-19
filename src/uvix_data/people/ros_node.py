@@ -45,7 +45,6 @@ def main():
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "uvix_data_project.settings")
     django.setup()
 
-    from django.db.utils import DatabaseError
     from people.permisos import ProveedorRos, evaluar
     from people.ros_services import get_person
     from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
@@ -58,16 +57,12 @@ def main():
     servicio_identidad = node.declare_parameter(
         "identity_service", "/uvix/get_request_identity").value
     timeout_identidad = node.declare_parameter("identity_timeout_s", 2.0).value
-    fallo_bd = []
-
     def get_person_cb(request, response):
-        try:
-            return get_person(request, response)
-        except DatabaseError as exc:
-            # Sin respuesta y el nodo se detiene: el cliente lo ve como
-            # servicio no disponible, nunca como found=False.
-            fallo_bd.append(exc)
-            raise
+        r = get_person(request, response)
+        if r.status == GetPerson.Response.STATUS_UNAVAILABLE:
+            # Se responde UNAVAILABLE (nunca NOT_FOUND) y el nodo sigue en marcha.
+            log.error(f"get_person {request.person_id!r}: registro no disponible (error de base de datos)")
+        return r
 
     # CheckPermission llama a GetRequestIdentity dentro de su callback: el
     # cliente va en otro callback group y el ejecutor es multihilo.
@@ -79,6 +74,8 @@ def main():
                     node.get_clock().now().nanoseconds, response)
         log.info(f"check_permission request_id={request.request_id} op={request.operation} "
                  f"persona={r.evaluated_person_id or '-'} code={r.code} allowed={r.allowed}")
+        if r.code == CheckPermission.Response.CODE_STORAGE_UNAVAILABLE:
+            log.error(f"check_permission: registro no disponible: {r.message}")
         return r
 
     executor = MultiThreadedExecutor(num_threads=4)
@@ -93,15 +90,16 @@ def main():
                             callback_group=ReentrantCallbackGroup())
         log.info(f"Servicios /uvix/get_person y /uvix/check_permission listos "
                  f"(identidad: {servicio_identidad}, timeout {timeout_identidad} s)")
-        while rclpy.ok() and not fallo_bd:
-            executor.spin_once(timeout_sec=0.2)
+        executor.spin()
     except (KeyboardInterrupt, ExternalShutdownException):
         # Ctrl+C o SIGTERM (rclpy cierra el contexto): cierre normal.
         pass
+    except Exception:
+        # Con SIGTERM el contexto puede cerrarse mientras el ejecutor prepara
+        # la espera (RCLError "context is not valid"): también es un cierre normal.
+        if rclpy.ok():
+            raise
     finally:
-        if fallo_bd:
-            log.fatal(f"Error de base de datos; el nodo se detiene: {fallo_bd[0]}")
-            codigo = 1
         executor.shutdown(timeout_sec=1.0)
         node.destroy_node()
         rclpy.try_shutdown()

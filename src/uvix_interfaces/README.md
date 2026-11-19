@@ -42,11 +42,15 @@ Con batería `LEVEL_CRITICAL`, la misión `go_charge` se registra con prioridad 
 
 | Rol (`Person.role`) | Puede pedir | Resultado si no puede |
 |---|---|---|
-| `ROLE_UNKNOWN` (no registrado) | Nada | `CODE_NOT_AUTHORIZED`; el robot no obedece |
-| Identidad sin verificar (`IDENTITY_CANDIDATE`) | Solo pedir ayuda (emergencia) | `CODE_IDENTITY_NOT_VERIFIED` para el resto |
-| `ROLE_PATIENT` | Ayuda (P1), bailar, conversar, recordatorios (P3) | `CODE_NOT_AUTHORIZED` si pide una tarea de cuidado |
-| `ROLE_STAFF` | Tareas de cuidado (P2) y todo lo de paciente | — |
+| **Cualquiera** (registrado o no, verificado o no, activo o no) | **Pedir ayuda, siempre** (seguridad primero) | Nunca se deniega |
+| `ROLE_UNKNOWN` (no registrado) | Solo pedir ayuda | `CODE_NOT_AUTHORIZED`; el robot no obedece |
+| Identidad sin verificar (`IDENTITY_CANDIDATE`) | Solo pedir ayuda | `CODE_IDENTITY_NOT_VERIFIED` para el resto |
+| `ROLE_PATIENT` | Ayuda (P1), bailar, conversar, recordatorio individual (P3) | `CODE_NOT_AUTHORIZED` si pide una tarea de cuidado o un recordatorio de grupo |
+| `ROLE_STAFF` | Tareas de cuidado (P2), recordatorios de grupo y todo lo de paciente | — |
 | `ROLE_ADMIN` | Todo, incluida configuración | — |
+
+La decisión la toma `/uvix/check_permission` (`uvix_data`); la matriz completa
+por operación está en el [README de `uvix_data`](../uvix_data/README.md).
 
 **La prioridad la fija siempre el `mission_manager`** según tipo de misión + rol;
 nunca el solicitante. Una petición de ayuda de un paciente cambia a P1 aunque el
@@ -63,12 +67,17 @@ El `mission_manager` rechaza cualquier otro valor con `CODE_UNKNOWN_MISSION_TYPE
 | `attend_help_request` | 1 | — | `Alert` EMERGENCY al personal |
 | `dispense_vitamins` | 2 | `item`, `dose` | `STATE_PARTIAL` + informe a `report_to` |
 | `deliver_item` | 2 | `item` | Informe a `report_to` |
-| `reminder_round` | 2 o 3 | `message` | `STATE_PARTIAL` + informe con los no encontrados |
+| `reminder_round` | 2 | `message` | `STATE_PARTIAL` + informe con los no encontrados |
+| `personal_reminder` | 3 | `message` | Informe a quien lo pidió |
 | `dance` | 3 | `song` | — |
 | `chat` | 3 | — | — |
 | `go_charge` | 4 (1 si crítica) | — | `SystemStatus` DEGRADED |
 
-Un recordatorio es P2 si lo ordena personal (o es programado) y P3 si lo pide un paciente.
+`reminder_round` es **siempre para un grupo** (varios `target_person_ids`); lo
+ordena el personal o se programa (`ORIGIN_SCHEDULE`). `personal_reminder` es el
+recordatorio que pide un paciente para una sola persona (él mismo, un encargado u
+otro paciente). El `mission_manager` valida esa forma; quién puede pedir cada uno
+lo decide `/uvix/check_permission`.
 
 ### 1.4 Reglas de interrupción
 
@@ -152,23 +161,34 @@ tampoco sirven para autorizar.
         │                                                     ▼
  mission_manager ◄── RegisterMission(MissionSpec con request_id y requested_by)
         │
-        └── GetPerson(person_id verificado) ──► role
+        └── CheckPermission(request_id, mission_type) ──► uvix_data
+                 (uvix_data pide GetRequestIdentity y lee role/active del registro)
 ```
 
-Cuando el manager recibe `RegisterMission`, `CancelMission` o `AckAlert`:
+Cuando el manager recibe `RegisterMission`, llama a `/uvix/check_permission`
+con el `request_id` y el `mission_type`. **No guarda personas ni tablas de
+roles propias**: la única fuente de permisos es `uvix_data`.
 
-| # | Comprobación | Si falla |
-|---|---|---|
-| 1 | Llama a `GetRequestIdentity(request_id)`: ¿existe la verificación? | `CODE_IDENTITY_NOT_VERIFIED` |
-| 2 | ¿`identity_status == IDENTITY_VERIFIED`? (`CANDIDATE` es solo una hipótesis) | `CODE_IDENTITY_NOT_VERIFIED`* |
-| 3 | ¿`ahora <= valid_until`? | `CODE_IDENTITY_EXPIRED` |
-| 4 | ¿`identity.person_id == requested_by`? | `CODE_IDENTITY_MISMATCH` |
-| 5 | ¿El `request_id` no se usó ya para otra misión? | `CODE_DUPLICATE_REQUEST` |
-| 6 | `GetPerson(identity.person_id)` → ¿el `role` permite este `mission_type`? | `CODE_NOT_AUTHORIZED` |
+| # | Comprobación | Quién la hace | Si falla |
+|---|---|---|---|
+| 1 | ¿Existe una verificación `VERIFIED` para el `request_id`? (`CANDIDATE` es solo una hipótesis) | `CheckPermission` (código 12) | `CODE_IDENTITY_NOT_VERIFIED`* |
+| 2 | ¿`ahora <= valid_until`? | `CheckPermission` (13) | `CODE_IDENTITY_EXPIRED`* |
+| 3 | ¿La persona está registrada, activa y su rol tiene esta operación? | `CheckPermission` (10, 14, 15) | `CODE_NOT_AUTHORIZED`* |
+| 4 | ¿El tipo es una operación registrada? | `CheckPermission` (11) | `CODE_UNKNOWN_MISSION_TYPE` |
+| 5 | ¿Se pudo decidir? | `CheckPermission` (20, 21 o sin respuesta) | `CODE_INTERNAL_ERROR`* (nunca asumir permiso) |
+| 6 | ¿`evaluated_person_id == requested_by`? | manager | `CODE_IDENTITY_MISMATCH` |
+| 7 | ¿El `request_id` no se usó ya para otra misión? | manager | `CODE_DUPLICATE_REQUEST` |
+| 8 | ¿La misión tiene la forma correcta? (p. ej. `reminder_round` con varios destinatarios) | manager | `CODE_INVALID_SPEC` |
 
-\* **Excepción de emergencia:** `attend_help_request` se acepta con
-`IDENTITY_CANDIDATE`, porque es preferible atender una falsa alarma a ignorar a
-alguien que pide ayuda.
+`CancelMission` y `AckAlert` siguen el mismo esquema con su propio `request_id`.
+
+\* **Pedir ayuda nunca se deniega:** `attend_help_request` se acepta aunque la
+identidad sea candidata, desconocida o esté vencida, la persona esté
+desactivada o no registrada, o no se pueda consultar la identidad o el
+registro. Es preferible atender una falsa alarma a ignorar a alguien que pide
+ayuda. `CheckPermission` responde `CODE_ALLOWED_HELP` y deja constancia de quién
+la pidió cuando se sabe. Para pedir ayuda el manager tampoco aplica los pasos 6 a 8:
+si `requested_by` no coincide o no hay identidad, la atiende igual.
 
 ### 3.3 Disponibilidad y validez de la verificación
 
@@ -193,13 +213,16 @@ alguien que pide ayuda.
 
 ### 3.4 Rol y permisos
 
-Con el `person_id` **verificado**, el manager consulta el rol con `GetPerson`
-(que lee [`personas.yaml`](#65-registro-de-personas-personasyaml)) y aplica la
-tabla [1.2](#12-quién-puede-pedir-qué):
+El manager no decide los permisos por su cuenta: llama a
+`/uvix/check_permission` (`request_id` + operación). `uvix_data` obtiene la
+identidad verificada, lee `role` y `active` del registro (SQLite, ver
+[6.5](#65-registro-de-personas)) y aplica la tabla [1.2](#12-quién-puede-pedir-qué):
 
-- `ROLE_STAFF` / `ROLE_ADMIN` → tareas de cuidado y sociales.
-- `ROLE_PATIENT` → ayuda y tareas sociales.
-- `ROLE_UNKNOWN` o no registrado → `CODE_NOT_AUTHORIZED`.
+- `ROLE_ADMIN` → cualquier operación registrada.
+- `ROLE_STAFF` → tareas de cuidado, recordatorios de grupo y tareas sociales.
+- `ROLE_PATIENT` → ayuda, tareas sociales y recordatorio individual.
+- `ROLE_UNKNOWN`, no registrado o desactivado → `CODE_NOT_AUTHORIZED` /
+  `CODE_PERSON_NOT_FOUND` / `CODE_PERSON_INACTIVE`, **salvo pedir ayuda**.
 
 ---
 
@@ -653,8 +676,29 @@ person_id: staff_juan
 Respuesta:
 
 ```yaml
+status: 0      # STATUS_OK; 1 = NOT_FOUND, 2 = UNAVAILABLE (registro ilegible)
 found: true
-person: {person_id: staff_juan, display_name: Juan, role: 2}
+person: {person_id: staff_juan, display_name: Juan, role: 2, active: true,
+         preferences: [{key: language, value: es}]}
+```
+
+**`CheckPermission`**: ¿puede quien hizo `req-0001` pedir una entrega?
+
+```yaml
+request_id: req-0001
+operation: deliver_item
+```
+
+Respuesta:
+
+```yaml
+allowed: true
+code: 0
+operation: deliver_item
+evaluated_person_id: staff_juan
+evaluated_role: 2
+identity_status: 2
+message: Permitido
 ```
 
 **`SpeakText`**: objetivo de la acción.
@@ -693,10 +737,11 @@ needs_charge: true
 needs_replacement: false
 ```
 
-### 6.5 Registro de personas (`personas.yaml`)
+### 6.5 Registro de personas
 
-Archivo de datos que carga el nodo que sirve `GetPerson` para mapear `person_id` → `Person`.
-No es un archivo de parámetros de ROS (contiene listas de objetos).
+El registro vive en una base SQLite gestionada con Django por `uvix_data`
+(alta con el admin o con `django shell`; ver su [README](../uvix_data/README.md)).
+Los datos ficticios de M1 equivalen a:
 
 ```yaml
 personas:
@@ -728,12 +773,20 @@ personas:
 | `clarification_timeout_s` | Espera máxima de la respuesta a una aclaración |
 | `default_report_to` | Destinatario del informe si la misión no indica `report_to` |
 | `priorities` | Prioridad de cada `mission_type` |
-| `min_role` | Rol mínimo para pedir cada `mission_type` |
+| `check_permission_service` | Servicio que decide los permisos (`uvix_data`) |
+| `check_permission_timeout_s` | Espera máxima de `CheckPermission`; incluye los 2.0 s de la consulta de identidad |
+
+El manager **no** tiene archivo de personas ni tabla de roles (antes
+`personas_file` y `min_role`): las personas viven en la base de `uvix_data` y los
+permisos se consultan con `CheckPermission`. Así hay una sola fuente de verdad y
+los cambios de permisos se hacen en el admin de `uvix_data` sin reconfigurar el
+manager.
 
 ```yaml
 mission_manager:
   ros__parameters:
-    personas_file: personas.yaml
+    check_permission_service: /uvix/check_permission
+    check_permission_timeout_s: 3.0
     social_max_duration_s: 120.0
     search_timeout_s: 600.0
     clarification_timeout_s: 20.0
@@ -743,18 +796,11 @@ mission_manager:
       attend_help_request: 1
       dispense_vitamins: 2
       deliver_item: 2
-      reminder_round_staff: 2
-      reminder_round_patient: 3
+      reminder_round: 2
+      personal_reminder: 3
       dance: 3
       chat: 3
       go_charge: 4
-    min_role:
-      attend_help_request: 1
-      dispense_vitamins: 2
-      deliver_item: 2
-      reminder_round: 1
-      dance: 1
-      chat: 1
 ```
 
 **`identity_manager.yaml`** (componente de identificación)

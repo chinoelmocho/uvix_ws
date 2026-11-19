@@ -1,5 +1,13 @@
 # srv/GetPerson.srv
 string person_id
 ---
-bool found
+# Resultado de la consulta (convención del issue #60). Los clientes deben
+# mirar status: NOT_FOUND es una respuesta válida ("no está registrada");
+# UNAVAILABLE significa que no se pudo consultar (nunca asumir un rol).
+uint8 STATUS_OK=0
+uint8 STATUS_NOT_FOUND=1
+uint8 STATUS_UNAVAILABLE=2
+uint8 status
+
+bool found                      # true solo con STATUS_OK; se mantiene por compatibilidad
 uvix_interfaces/Person person   # role = ROLE_UNKNOWN si found es false

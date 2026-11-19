@@ -206,3 +206,23 @@ en `/tmp/uvix_m105_*`.
 - [ ] Repetir las mediciones en la Jetson (sección 7).
 - [ ] Completar el resto del issue #60 (H7).
 - [ ] Opcional: borrar `/tmp/uvix_m105_*` (compilaciones y logs de esta validación).
+
+## 10. Actualización 2026-11-19 (resto del issue #60)
+
+| Hallazgo | Estado |
+|---|---|
+| H1 | **Resuelto.** `GetPerson` tiene `status` (`OK`/`NOT_FOUND`/`UNAVAILABLE`); ante un error de base el nodo responde `UNAVAILABLE` y sigue en marcha |
+| H2 | **Resuelto.** `PersonPreference` (migración `0002`); `GetPerson` devuelve solo las claves permitidas |
+| H3 | Pendiente (`DEBUG` y `SECRET_KEY`) |
+| H4 | **Resuelto.** `m1_capacidades.yaml` (0.2.0), `m1_interfaces.md` y el README de interfaces describen `uvix_data` con SQLite. Se mantienen los nombres `/uvix/*` en lugar de `/people/*` |
+| H5, H6 | Sin cambios |
+| H7 | **Resuelto.** `CheckPermission.srv` + `/uvix/check_permission`; `FaceTemplate` + `EnrollFace.action` (alta simulada) |
+
+Decisiones de esta entrega:
+
+- **Pedir ayuda nunca se deniega** (seguridad primero), aunque fallen la identidad, el registro o la base.
+- `reminder_round` es siempre de grupo (P2); el recordatorio individual de un paciente es `personal_reminder` (`MissionSpec.TYPE_PERSONAL_REMINDER`, P3).
+- El `mission_manager` no tiene `personas_file` ni `min_role`: consulta `/uvix/check_permission`.
+
+Detalle, matriz de permisos y comandos en el [README de `uvix_data`](../src/uvix_data/README.md).
+Pruebas: 53 unitarias, `validar_get_person.py` 15/15, `validar_permisos.py` 32/32.

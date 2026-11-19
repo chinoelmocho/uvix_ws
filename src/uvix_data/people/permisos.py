@@ -25,10 +25,11 @@ from .models import Capability, Person, RolePermission
 
 R = CheckPermission.Response
 
-# Excepción documentada en uvix_interfaces/README.md §1.2 y §3.2: pedir ayuda
-# se acepta con IDENTITY_CANDIDATE. No es configurable desde la base a
-# propósito; solo relaja el paso "¿está verificada?". Vencimiento, registro,
-# estado activo y concesión del rol se siguen comprobando.
+# Regla de seguridad: pedir ayuda NUNCA se deniega. Da igual que la identidad
+# sea candidata, desconocida o esté vencida, que la persona esté desactivada o
+# no registrada, o que el proveedor de identidad o la base no respondan. La
+# identidad solo se consulta para dejar constancia de quién la pidió. No es
+# configurable desde la base a propósito.
 OPERACION_AYUDA = "attend_help_request"  # == MissionSpec.TYPE_ATTEND_HELP_REQUEST
 
 
@@ -122,16 +123,60 @@ def _responder(resp, code, message):
     return resp
 
 
+def _evaluar_ayuda(request_id, proveedor, ahora_ns, resp):
+    """Pedir ayuda: siempre allowed. CODE_ALLOWED solo si además la identidad
+    está verificada, vigente, registrada, activa y con la concesión; en otro
+    caso CODE_ALLOWED_HELP con el motivo en ``message``."""
+    motivo = None
+    ident_resp = proveedor.consultar(request_id) if request_id else None
+    if ident_resp is None:
+        motivo = "identidad no consultable"
+    elif not ident_resp.found or not ident_resp.identity.person_id \
+            or ident_resp.identity.request_id != request_id:
+        motivo = "identidad desconocida"
+    else:
+        ident = ident_resp.identity
+        resp.identity_status = ident.identity_status
+        resp.evaluated_person_id = ident.person_id
+        valid_until = ns_de(ident.valid_until)
+        if ident.identity_status != IdentityVerification.IDENTITY_VERIFIED:
+            motivo = "identidad no verificada"
+        elif valid_until == 0 or ahora_ns > valid_until:
+            motivo = "verificación vencida"
+        else:
+            try:
+                persona = Person.objects.filter(person_id=ident.person_id).first()
+                if persona is None:
+                    motivo = "persona no registrada"
+                else:
+                    resp.evaluated_role = persona.role
+                    if not persona.active:
+                        motivo = "persona desactivada"
+                    elif persona.role != Person.Role.ADMIN and not RolePermission.objects.filter(
+                            role=persona.role, capability__code=OPERACION_AYUDA).exists():
+                        motivo = "rol sin concesión"
+            except DatabaseError:
+                motivo = "registro no disponible"
+    if motivo is None:
+        return _responder(resp, R.CODE_ALLOWED, "Permitido")
+    return _responder(resp, R.CODE_ALLOWED_HELP,
+                      f"Ayuda aceptada siempre (seguridad primero): {motivo}")
+
+
 def evaluar(request_id, operation, proveedor, ahora_ns, resp=None):
     """Decide si quien hizo ``request_id`` puede solicitar ``operation``.
 
-    Orden: petición válida -> operación registrada -> identidad confiable
+    Pedir ayuda va por ``_evaluar_ayuda`` y nunca se deniega. Para el resto,
+    orden: petición válida -> operación registrada -> identidad confiable
     -> vigencia -> registro local (existe, activo) -> rol/concesión.
     """
     resp = resp or R()
     resp.operation = operation
     resp.evaluated_role = PersonMsg.ROLE_UNKNOWN
     resp.identity_status = IdentityVerification.IDENTITY_UNKNOWN
+
+    if operation == OPERACION_AYUDA:
+        return _evaluar_ayuda(request_id, proveedor, ahora_ns, resp)
 
     if not request_id or not operation:
         return _responder(resp, R.CODE_INVALID_REQUEST, "request_id y operation son obligatorios")
@@ -156,13 +201,10 @@ def evaluar(request_id, operation, proveedor, ahora_ns, resp=None):
         return _responder(resp, R.CODE_IDENTITY_NOT_VERIFIED, "Identidad desconocida")
     resp.evaluated_person_id = ident.person_id
 
-    candidata_ayuda = False
     if ident.identity_status == IdentityVerification.IDENTITY_CANDIDATE:
-        if operation != OPERACION_AYUDA:
-            return _responder(resp, R.CODE_IDENTITY_NOT_VERIFIED,
-                              "Identidad solo candidata: no basta para esta operación")
-        candidata_ayuda = True
-    elif ident.identity_status != IdentityVerification.IDENTITY_VERIFIED:
+        return _responder(resp, R.CODE_IDENTITY_NOT_VERIFIED,
+                          "Identidad solo candidata: no basta para esta operación")
+    if ident.identity_status != IdentityVerification.IDENTITY_VERIFIED:
         return _responder(resp, R.CODE_IDENTITY_NOT_VERIFIED, "Estado de identidad no válido")
 
     valid_until = ns_de(ident.valid_until)
@@ -189,7 +231,4 @@ def evaluar(request_id, operation, proveedor, ahora_ns, resp=None):
     if not concedida:
         return _responder(resp, R.CODE_NOT_AUTHORIZED,
                           f"El rol {Person.Role(persona.role).label} no tiene {operation}")
-    if candidata_ayuda:
-        return _responder(resp, R.CODE_ALLOWED_CANDIDATE_HELP,
-                          "Ayuda aceptada con identidad candidata (excepción de emergencia)")
     return _responder(resp, R.CODE_ALLOWED, "Permitido")

@@ -19,7 +19,8 @@ OPERACIONES = [
     ("deliver_item", "Enviar un encargo a una persona", "encargo",
      "MissionSpec.TYPE_DELIVER_ITEM. 'Encargo' es la categoría; se autoriza esta operación concreta."),
     ("reminder_round", "Programar recordatorios para un grupo", "recordatorio",
-     "MissionSpec.TYPE_REMINDER_ROUND (P2 si lo ordena personal o es programado, P3 si lo pide un paciente)."),
+     "MissionSpec.TYPE_REMINDER_ROUND. Siempre para un grupo en horarios establecidos (P2). "
+     "El recordatorio individual de un paciente es personal_reminder."),
     ("find_person", "Búsqueda física de una persona", "busqueda",
      "El robot recorre zonas para localizar a una persona. Sin tipo de misión todavía."),
     ("operational_report", "Informe operativo de pacientes o de una ronda", "informe",
@@ -34,7 +35,11 @@ OPERACIONES = [
      "ni mediciones, que requerirían un permiso propio. Independiente de find_person."),
     # --- Tipos de MissionSpec ya documentados que una persona puede pedir ---
     ("attend_help_request", "Pedir ayuda", "emergencia",
-     "MissionSpec.TYPE_ATTEND_HELP_REQUEST. Única operación admitida con identidad candidata."),
+     "MissionSpec.TYPE_ATTEND_HELP_REQUEST. Nunca se deniega (seguridad primero), "
+     "aunque la identidad o el registro no se confirmen."),
+    ("personal_reminder", "Recordatorio individual", "recordatorio",
+     "MissionSpec.TYPE_PERSONAL_REMINDER. Un paciente pide que se le recuerde algo a él o a otra "
+     "persona (P3). Un solo destinatario, sin grupo."),
     ("dance", "Bailar", "social", "MissionSpec.TYPE_DANCE."),
     ("chat", "Conversar", "social", "MissionSpec.TYPE_CHAT."),
     ("dispense_vitamins", "Dispensar vitaminas", "cuidado", "MissionSpec.TYPE_DISPENSE_VITAMINS."),
@@ -49,9 +54,11 @@ SIETE_STAFF = ["deliver_item", "reminder_round", "find_person", "operational_rep
 CONCESIONES = (
     # STAFF: las siete acordadas + lo documentado (cuidado y todo lo de paciente)
     [(STAFF, c) for c in SIETE_STAFF]
-    + [(STAFF, c) for c in ("dispense_vitamins", "attend_help_request", "dance", "chat")]
-    # PATIENT: reglas documentadas en uvix_interfaces/README.md §1.2
-    + [(PATIENT, c) for c in ("attend_help_request", "dance", "chat", "reminder_round")]
+    + [(STAFF, c) for c in ("dispense_vitamins", "attend_help_request", "dance", "chat",
+                            "personal_reminder")]
+    # PATIENT: reglas documentadas en uvix_interfaces/README.md §1.2. Los
+    # recordatorios de grupo (reminder_round) no; el suyo es personal_reminder.
+    + [(PATIENT, c) for c in ("attend_help_request", "dance", "chat", "personal_reminder")]
 )
 
 

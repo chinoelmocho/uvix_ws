@@ -8,7 +8,6 @@ Requiere haber hecho ``source`` del install con uvix_interfaces:
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
-from django.db.utils import DatabaseError
 from django.test import TestCase, TransactionTestCase
 from uvix_interfaces.msg import Person as PersonMsg
 from uvix_interfaces.srv import GetPerson
@@ -69,16 +68,23 @@ class GetPersonTests(TestCase):
         self.assertEqual(Person.Role.STAFF, PersonMsg.ROLE_STAFF)
         self.assertEqual(Person.Role.ADMIN, PersonMsg.ROLE_ADMIN)
 
-    def test_error_de_almacenamiento_no_es_found_false(self):
-        # Un fallo de la base debe propagarse; nunca convertirse en found=False.
+    def test_status_ok_y_not_found(self):
+        self.assertEqual(consultar("prueba_staff_01").status, GetPerson.Response.STATUS_OK)
+        self.assertEqual(consultar("prueba_paciente_02").status, GetPerson.Response.STATUS_OK)
+        self.assertEqual(consultar("no_existe_999").status, GetPerson.Response.STATUS_NOT_FOUND)
+
+    def test_error_de_almacenamiento_es_unavailable_no_not_found(self):
+        # Un fallo de la base se responde UNAVAILABLE; nunca NOT_FOUND.
         with connection.cursor() as cur:
             cur.execute("ALTER TABLE people_person RENAME TO people_person_oculta")
         try:
-            with self.assertRaises(DatabaseError):
-                consultar("prueba_staff_01")
+            r = consultar("prueba_staff_01")
         finally:
             with connection.cursor() as cur:
                 cur.execute("ALTER TABLE people_person_oculta RENAME TO people_person")
+        self.assertEqual(r.status, GetPerson.Response.STATUS_UNAVAILABLE)
+        self.assertFalse(r.found)
+        self.assertEqual(r.person.role, PersonMsg.ROLE_UNKNOWN)
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +195,30 @@ class PermisosTests(TestCase):
                      "dance", "chat", "dispense_vitamins"):
             self.assertIn(tipo, codigos)
 
+    def test_tipos_de_mision_solicitables_estan_en_el_catalogo(self):
+        # Compatibilidad con el mission_manager: consulta CheckPermission con el
+        # mission_type como operación, así que cada TYPE_* que una persona puede
+        # pedir debe existir en el catálogo. attend_fall y go_charge los origina
+        # el robot (DETECTION / SYSTEM) y no pasan por CheckPermission.
+        from uvix_interfaces.msg import MissionSpec
+        tipos = {getattr(MissionSpec, n) for n in dir(MissionSpec) if n.startswith("TYPE_")}
+        internos = {MissionSpec.TYPE_ATTEND_FALL, MissionSpec.TYPE_GO_CHARGE}
+        codigos = set(Capability.objects.values_list("code", flat=True))
+        self.assertEqual(tipos - internos - codigos, set())
+        self.assertEqual(MissionSpec.TYPE_PERSONAL_REMINDER, "personal_reminder")
+
+    def test_codigos_de_check_permission_estables(self):
+        # Rangos documentados: 0-9 permitido, 10-19 denegado, 20-29 sin decisión.
+        valores = {n: getattr(C, n) for n in dir(C) if n.startswith("CODE_")}
+        self.assertEqual(valores, {
+            "CODE_ALLOWED": 0, "CODE_ALLOWED_HELP": 1, "CODE_NOT_AUTHORIZED": 10,
+            "CODE_UNKNOWN_OPERATION": 11, "CODE_IDENTITY_NOT_VERIFIED": 12,
+            "CODE_IDENTITY_EXPIRED": 13, "CODE_PERSON_NOT_FOUND": 14,
+            "CODE_PERSON_INACTIVE": 15, "CODE_INVALID_REQUEST": 16,
+            "CODE_IDENTITY_UNAVAILABLE": 20, "CODE_STORAGE_UNAVAILABLE": 21})
+        self.assertEqual((GetPerson.Response.STATUS_OK, GetPerson.Response.STATUS_NOT_FOUND,
+                          GetPerson.Response.STATUS_UNAVAILABLE), (0, 1, 2))
+
     def test_concesion_duplicada_se_rechaza(self):
         cap = Capability.objects.get(code="deliver_item")
         with self.assertRaises(IntegrityError), transaction.atomic():
@@ -212,9 +242,10 @@ class PermisosTests(TestCase):
             self.assertTrue(self.pedir("prueba_admin_01", op).allowed, op)
 
     def test_paciente_reglas_documentadas(self):
-        for op in ("attend_help_request", "dance", "chat", "reminder_round"):
-            self.assertTrue(self.pedir("prueba_paciente_maria", op).allowed, op)
-        for op in ("deliver_item", "find_person", "operational_report", "socialize_zone",
+        for op in ("attend_help_request", "dance", "chat", "personal_reminder"):
+            self.assertEqual(self.pedir("prueba_paciente_maria", op).code, C.CODE_ALLOWED, op)
+        # reminder_round es siempre de grupo: no es del paciente.
+        for op in ("reminder_round", "deliver_item", "find_person", "operational_report", "socialize_zone",
                    "dispense_medication", "list_patients", "dispense_vitamins", "enroll_face"):
             r = self.pedir("prueba_paciente_maria", op)
             self.assertEqual((r.allowed, r.code), (False, C.CODE_NOT_AUTHORIZED), op)
@@ -258,17 +289,46 @@ class PermisosTests(TestCase):
         r = self.pedir("prueba_admin_01", "deliver_item", status=IV.IDENTITY_CANDIDATE)
         self.assertEqual((r.allowed, r.code), (False, C.CODE_IDENTITY_NOT_VERIFIED))
 
-    def test_excepcion_de_ayuda_con_candidata(self):
-        r = self.pedir("prueba_paciente_maria", "attend_help_request", status=IV.IDENTITY_CANDIDATE)
-        self.assertEqual((r.allowed, r.code), (True, C.CODE_ALLOWED_CANDIDATE_HELP))
-        self.assertEqual(r.identity_status, IV.IDENTITY_CANDIDATE)
+    # --- pedir ayuda: nunca se deniega (seguridad primero) ---
+    def test_ayuda_verificada_es_allowed_normal(self):
+        r = self.pedir("prueba_paciente_maria", "attend_help_request")
+        self.assertEqual((r.allowed, r.code), (True, C.CODE_ALLOWED))
 
-    def test_excepcion_de_ayuda_no_salta_vencimiento_ni_desconocida(self):
-        r = self.pedir("prueba_paciente_maria", "attend_help_request",
-                       status=IV.IDENTITY_CANDIDATE, valid_until=VENCIDA)
-        self.assertEqual(r.code, C.CODE_IDENTITY_EXPIRED)
-        r = self.pedir("", "attend_help_request", status=IV.IDENTITY_UNKNOWN)
-        self.assertEqual(r.code, C.CODE_IDENTITY_NOT_VERIFIED)
+    def test_ayuda_nunca_se_deniega(self):
+        H = "attend_help_request"
+        casos = {
+            "candidata": dict(person_id="prueba_paciente_maria", status=IV.IDENTITY_CANDIDATE),
+            "desconocida": dict(person_id="", status=IV.IDENTITY_UNKNOWN),
+            "vencida": dict(person_id="prueba_paciente_maria", valid_until=VENCIDA),
+            "candidata y vencida": dict(person_id="prueba_paciente_maria",
+                                        status=IV.IDENTITY_CANDIDATE, valid_until=VENCIDA),
+            "sin verificación": dict(person_id=None),
+            "desactivada": dict(person_id="prueba_staff_baja"),
+            "no registrada": dict(person_id="no_registrado_999"),
+            "rol desconocido": dict(person_id="prueba_sin_rol"),
+            "proveedor caído": dict(person_id="prueba_paciente_maria",
+                                    proveedor=ProveedorNoDisponible()),
+        }
+        for nombre, kw in casos.items():
+            pid = kw.pop("person_id")
+            r = self.pedir(pid, H, **kw)
+            self.assertEqual((r.allowed, r.code), (True, C.CODE_ALLOWED_HELP), nombre)
+        self.assertEqual(evaluar("", H, self.prov, AHORA).code, C.CODE_ALLOWED_HELP)
+
+    def test_ayuda_con_base_no_disponible(self):
+        with connection.cursor() as cur:
+            cur.execute("ALTER TABLE people_person RENAME TO people_person_oculta")
+        try:
+            r = self.pedir("prueba_paciente_maria", "attend_help_request")
+        finally:
+            with connection.cursor() as cur:
+                cur.execute("ALTER TABLE people_person_oculta RENAME TO people_person")
+        self.assertEqual((r.allowed, r.code), (True, C.CODE_ALLOWED_HELP))
+
+    def test_ayuda_registra_quien_la_pidio(self):
+        r = self.pedir("prueba_paciente_maria", "attend_help_request", status=IV.IDENTITY_CANDIDATE)
+        self.assertEqual((r.evaluated_person_id, r.identity_status),
+                         ("prueba_paciente_maria", IV.IDENTITY_CANDIDATE))
 
     def test_identidad_vencida(self):
         r = self.pedir("prueba_staff_juan", "deliver_item", valid_until=VENCIDA)

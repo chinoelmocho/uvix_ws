@@ -15,7 +15,8 @@ ofrece por ROS 2 mediante un único servicio:
 ```
 /uvix/get_person   (uvix_interfaces/srv/GetPerson)
   petición:  string person_id
-  respuesta: bool found
+  respuesta: uint8 status                    # 0 OK, 1 NOT_FOUND, 2 UNAVAILABLE
+             bool found                      # true solo con OK (compatibilidad)
              uvix_interfaces/Person person   # person_id, display_name, role, active, preferences
 ```
 
@@ -78,22 +79,19 @@ verdad**.
 
 | Situación | Respuesta | Qué debe entender el cliente |
 |---|---|---|
-| `person_id` registrado y activo | `found=true`, datos completos, `active=true` | Persona conocida con ese rol |
-| `person_id` registrado pero desactivado | `found=true`, mismo nombre y rol, `active=false` | Se sabe quién es, pero **no puede autorizar** operaciones nuevas |
-| `person_id` desconocido (o vacío) | `found=false`, `role=ROLE_UNKNOWN` | Persona no registrada → sin permisos |
-| Error de la base (tabla inaccesible, archivo dañado…) | **Ninguna**: el nodo escribe `FATAL Error de base de datos…` y termina con código 1 | Registro no disponible → **nunca asumir un rol** (`CODE_INTERNAL_ERROR`) |
+| `person_id` registrado y activo | `status=OK`, `found=true`, datos completos, `active=true` | Persona conocida con ese rol |
+| `person_id` registrado pero desactivado | `status=OK`, `found=true`, mismo nombre y rol, `active=false` | Se sabe quién es, pero **no puede autorizar** operaciones nuevas |
+| `person_id` desconocido (o vacío) | `status=NOT_FOUND`, `found=false`, `role=ROLE_UNKNOWN` | Persona no registrada → sin permisos |
+| Error de la base (tabla inaccesible, archivo dañado…) | `status=UNAVAILABLE`, `found=false`; `ERROR … registro no disponible` en el log; el nodo **sigue en marcha** | Registro no disponible → **nunca asumir un rol** (`CODE_INTERNAL_ERROR`) |
 
-Lo importante es la diferencia entre las dos últimas filas: `found=false` es
-una respuesta válida ("no está registrada"); la falta de respuesta significa
-que el registro no está disponible. El nodo nunca convierte un fallo de
-almacenamiento en `found=false`.
+Lo importante es la diferencia entre las dos últimas filas: `NOT_FOUND` es una
+respuesta válida ("no está registrada"); `UNAVAILABLE` significa que no se pudo
+consultar. Por eso los clientes deben mirar `status` y no solo `found`.
 
-> Por qué no se responde en caso de error: el contrato `GetPerson` solo tiene
-> `found` y no hay forma de decir "no disponible". En rclpy Humble, además, un
-> callback no puede dejar de responder. Por eso el nodo se detiene y el cliente
-> vence su timeout (1 s según el catálogo M1). Para responder `UNAVAILABLE` sin
-> detener el nodo habría que añadir un campo `status` a `GetPerson`; queda como
-> propuesta (H1 en el informe de validación).
+> Historia: hasta M1-05 el contrato solo tenía `found` y, ante un error de base,
+> el nodo se detenía sin responder para no confundirlo con "no registrada"
+> (hallazgo H1). Con `status` (convención del issue #60) responde `UNAVAILABLE`
+> y se recupera solo cuando la base vuelve a estar disponible.
 
 ### 3.3 Cierre
 
