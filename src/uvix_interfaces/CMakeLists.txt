@@ -33,9 +33,11 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/AckAlert.srv"
   "srv/GetPerson.srv"
   "srv/GetRequestIdentity.srv"
+  "srv/CheckPermission.srv"
   # Acciones
   "action/ExecuteMission.action"
   "action/SpeakText.action"
+  "action/EnrollFace.action"
   DEPENDENCIES std_msgs builtin_interfaces sensor_msgs action_msgs
 )
 

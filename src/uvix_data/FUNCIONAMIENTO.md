@@ -51,7 +51,10 @@ Cómo leer el diagrama, de izquierda a derecha:
 | `display_name` | `display_name` |
 | `role` 0 / 1 / 2 / 3 | `ROLE_UNKNOWN` / `ROLE_PATIENT` / `ROLE_STAFF` / `ROLE_ADMIN` |
 | `active` | `active` |
-| (no se guarda) | `preferences`: siempre vacío por ahora |
+| `PersonPreference` (claves permitidas, ordenadas) | `preferences`: vacío si la persona no tiene preferencias |
+
+Permisos (`/uvix/check_permission`) y plantillas faciales (`/uvix/enroll_face`):
+ver el [README](README.md) §3–§6.
 
 ## 3. Arranque, consulta y cierre
 

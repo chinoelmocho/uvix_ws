@@ -1,86 +1,251 @@
 # uvix_data
 
-Registro local de personas de UVIX (M1-05). Un nodo ROS 2 ofrece
-`/uvix/get_person` (`uvix_interfaces/srv/GetPerson`) leyendo una base SQLite
-gestionada con Django. Explicación con diagramas: [FUNCIONAMIENTO.md](FUNCIONAMIENTO.md).
+Registro local de personas, preferencias, permisos y plantillas faciales de UVIX
+(M1-05, issue #60). Django + SQLite, servido por ROS 2:
 
-| Petición | Respuesta |
+| Interfaz | Tipo | Ejecutable | Estado |
+|---|---|---|---|
+| `/uvix/get_person` | `GetPerson` (srv) | `uvix_data_node` | implementado |
+| `/uvix/check_permission` | `CheckPermission` (srv) | `uvix_data_node` | implementado |
+| `/uvix/enroll_face` | `EnrollFace` (action) | `uvix_enroll_face_sim` | **simulado** (sin cámara) |
+
+Explicación de `GetPerson` con diagramas: [FUNCIONAMIENTO.md](FUNCIONAMIENTO.md).
+Diseño del siguiente módulo (recordatorios, grupos, notas): [DISENO_REMINDERS.md](DISENO_REMINDERS.md).
+
+Todo lo de este documento se comprobó el 2026-11-19 en ROS 2 Humble (Ubuntu
+22.04, WSL2), `/usr/bin/python3` sin entorno virtual, Cyclone DDS y solo datos
+ficticios.
+
+## 1. Esquema de relaciones
+
+```
+Person (person_id único, display_name, role, active)        ← registro central
+ ├─< PersonPreference (key, value)        UNIQUE(person, key)
+ └─< FaceTemplate (template_id único, consentimiento, modelo, estado)   ← interno
+
+Capability (code único)  ─<  RolePermission (role ∈ {PATIENT, STAFF})   UNIQUE(role, capability)
+```
+
+- Los modelos nuevos usan campos estándar de Django; pasar a PostgreSQL es
+  cambiar `DATABASES` y migrar. Las interfaces ROS no cambian.
+- Migraciones: `0002` preferencias, `0003` catálogo y permisos, `0004` carga del
+  catálogo inicial (datos), `0005` plantillas faciales. Las personas existentes
+  no se modifican: siguen apareciendo en `GetPerson` con `preferences: []`.
+- El historial de misiones no vive aquí (ver [DISENO_REMINDERS.md](DISENO_REMINDERS.md) §2).
+
+## 2. Preferencias de interacción
+
+| Clave | Valores | ¿La devuelve `GetPerson`? |
+|---|---|---|
+| `language` | `es`, `en` | sí |
+| `speech_rate` | `slow`, `normal`, `fast` | sí |
+| `form_of_address` | `tu`, `usted` | sí |
+| `favorite_activity` | texto libre (≤64) | sí |
+
+`GetPerson` devuelve solo las preferencias de esa persona, ordenadas por clave y
+filtradas por la lista anterior (`PREFERENCIAS_GET_PERSON` en `people/models.py`).
+Una clave escrita a mano en la base que no esté en la lista nunca sale por ROS.
+**Las preferencias no conceden permisos**: `CheckPermission` no las lee.
+
+## 3. Catálogo de operaciones
+
+Una *operación* es algo que una persona puede **solicitar**. No es lo mismo que
+las capacidades técnicas de [`docs/m1_capacidades.yaml`](../../docs/m1_capacidades.yaml)
+(percepción, voz, rostros...). Cuando coincide con un `MissionSpec.TYPE_*`, se
+usa el mismo código. La categoría es descriptiva: se autoriza siempre la
+operación concreta (pedir `encargo` → `CODE_UNKNOWN_OPERATION`).
+
+| Código | Operación | Origen | Ejecutor |
+|---|---|---|---|
+| `deliver_item` | Enviar un encargo a una persona | `MissionSpec.TYPE_DELIVER_ITEM` | contrato de misión; ejecutor pendiente |
+| `reminder_round` | Recordatorios para un grupo en un horario | `MissionSpec.TYPE_REMINDER_ROUND` | contrato de misión; ejecutor pendiente |
+| `find_person` | Búsqueda física de una persona | nuevo | solo registrada |
+| `operational_report` | Informe operativo (visitas, avisos, no localizados) | nuevo | solo registrada |
+| `socialize_zone` | Socializar con pacientes en una zona | nuevo (distinto de `dance`/`chat`, que pide el paciente para sí) | solo registrada |
+| `dispense_medication` | Dispensación de medicamentos para un grupo | nuevo (distinto de `dispense_vitamins`). **Solo autorización con datos ficticios; sin dispensación, dosis ni decisiones clínicas** | solo registrada |
+| `list_patients` | Buscar y listar pacientes en el registro | nuevo (independiente de `find_person`). Da el resumen autorizado; notas o mediciones requerirían su propia operación | solo registrada |
+| `attend_help_request` | Pedir ayuda | `MissionSpec` | contrato; ejecutor pendiente |
+| `dance`, `chat` | Bailar, conversar | `MissionSpec` | contrato; ejecutor pendiente |
+| `dispense_vitamins` | Dispensar vitaminas | `MissionSpec` | contrato; ejecutor pendiente |
+| `enroll_face` | Alta facial guiada | nuevo | `uvix_enroll_face_sim` (simulado) |
+
+"Ejecutor pendiente": `mission_manager` todavía no tiene código; el tipo existe
+en `MissionSpec`, pero nadie ejecuta la misión. `attend_fall` y `go_charge` no
+están en el catálogo porque los origina el robot (`DETECTION`/`SYSTEM`), no una
+persona.
+
+**Carga reproducible:** la migración `0004_catalogo_inicial` crea el catálogo y
+las concesiones en cualquier base con `migrate` (idempotente). Las operaciones
+nuevas se añaden con el admin o con `Capability.objects.create(...)`.
+
+## 4. Matriz de permisos
+
+| Operación | PATIENT | STAFF | ADMIN |
+|---|---|---|---|
+| Las siete acordadas (`deliver_item` … `list_patients`) | `reminder_round` sí; el resto no | **sí** | sí |
+| `attend_help_request`, `dance`, `chat` | sí | sí | sí |
+| `dispense_vitamins` | no | sí | sí |
+| `enroll_face` | no | no (sin concesión) | sí |
+| Operación registrada después | solo con concesión | solo con concesión | **sí, de inmediato** |
+| Operación no registrada | no | no | **no** |
+
+Condiciones comunes: identidad `VERIFIED` y vigente para ese `request_id` (según
+el proveedor confiable), persona en el registro y `active = true`. Una persona
+desactivada conserva su registro y no autoriza nada. `ROLE_UNKNOWN` no tiene
+concesiones.
+
+**Excepción de ayuda** (README de `uvix_interfaces` §1.2 y §3.2):
+`attend_help_request` se acepta con `IDENTITY_CANDIDATE` → `CODE_ALLOWED_CANDIDATE_HELP`.
+Solo relaja la verificación: la identidad debe seguir vigente, la persona
+candidata debe estar registrada y activa y su rol debe tener la operación. No es
+configurable desde la base.
+
+> El paciente tiene `reminder_round` porque así está documentado (P3 cuando lo
+> pide un paciente). Limitar ese recordatorio a una persona y sin horario de grupo
+> corresponde al `mission_manager` al construir el `MissionSpec`.
+
+## 5. `/uvix/check_permission`
+
+Petición: `request_id` + `operation`. No acepta rol, `person_id` ni "verificado"
+del cliente: la identidad se pide a `/uvix/get_request_identity` (parámetros
+`identity_service` e `identity_timeout_s`, 2.0 s) y `role`/`active` se leen de la base.
+
+Orden de comprobación y códigos estables (`CheckPermission.srv`):
+
+| # | Comprobación | Código si falla |
+|---|---|---|
+| 1 | `request_id` y `operation` presentes | 16 `INVALID_REQUEST` |
+| 2 | Operación registrada | 11 `UNKNOWN_OPERATION` |
+| 3 | El proveedor de identidad responde | 20 `IDENTITY_UNAVAILABLE` |
+| 4 | Existe verificación para ese `request_id`, no es `UNKNOWN`, es `VERIFIED` (o `CANDIDATE` + ayuda) | 12 `IDENTITY_NOT_VERIFIED` |
+| 5 | `ahora ≤ valid_until` | 13 `IDENTITY_EXPIRED` |
+| 6 | La persona está en el registro | 14 `PERSON_NOT_FOUND` |
+| 7 | `active = true` | 15 `PERSON_INACTIVE` |
+| 8 | ADMIN, o concesión `RolePermission` del rol | 10 `NOT_AUTHORIZED` |
+| — | Base ilegible en cualquier paso | 21 `STORAGE_UNAVAILABLE` |
+
+Rangos: 0–9 permitido, 10–19 denegación válida, 20–29 **sin decisión** (no se
+pudo consultar; el cliente no debe tratarlo como permiso ni como denegación
+definitiva → `RegisterMission.CODE_INTERNAL_ERROR`). La respuesta incluye
+`evaluated_person_id`: siempre es el **solicitante** (si Juan pide una entrega
+para María, se evalúa a Juan).
+
+## 6. Plantillas faciales (`FaceTemplate`) y `EnrollFace`
+
+| Campo | Contenido |
 |---|---|
-| `person_id` registrado | `found: true` + `Person` (`person_id`, `display_name`, `role`, `active`) |
-| `person_id` desconocido | `found: false`, `role: 0` (`ROLE_UNKNOWN`) |
-| Base inutilizable | **no hay respuesta**: el nodo no arranca o se detiene con un error en el log. El cliente lo trata como servicio no disponible, nunca como `found: false` |
+| `template_id` | `ftpl-` + UUID, único y estable |
+| `person` | FK a `Person`; una persona tiene 0..n plantillas |
+| `source` | `guided_capture` (futuro) o `simulated` (M1) |
+| `consent_ref` | Referencia al consentimiento; obligatorio (restricción en la base) |
+| `enrolled_by`, `request_id` | Operador autorizado y petición que la creó |
+| `model_name`, `model_version` | Modelo con el que se generó |
+| `quality`, `samples` | Calidad media y número de muestras |
+| `embedding_ref` | Referencia al vector; en M1 `ficticio://…`. **No se guarda biometría** |
+| `status`, `revoked_at`, `revoke_reason` | `active` / `revoked` |
 
-Una persona desactivada se sigue encontrando (`found: true`, `active: false`) y
-conserva su identidad y su rol. `preferences` se devuelve siempre vacía: el
-modelo aún no guarda preferencias.
+- **Alta:** solo con `EnrollFace` terminado en `RESULT_ENROLLED`. La fila se
+  crea al final, en una transacción, tras comprobar por última vez la
+  cancelación. Cancelada, calidad insuficiente o incompleta = ninguna fila.
+  Requiere `consent_ref`, persona registrada y activa, y `CheckPermission(enroll_face)`
+  (solo ADMIN por defecto).
+- **Consulta:** solo el componente de identificación, internamente. No sale por
+  `GetPerson` (el mensaje `Person` no tiene campos para ello), ni por topics,
+  ni en el resultado o el feedback de `EnrollFace` (solo `template_id`).
+- **Actualización:** no se editan; se da de alta una nueva y se revoca la anterior
+  (p. ej. al cambiar de modelo).
+- **Baja:** `revoke()` (o la acción del admin) marca `revoked` y borra
+  `embedding_ref`. Si se retira el consentimiento se eliminan las filas.
+- **Quién administra:** ADMIN (admin de Django y `enroll_face`). Se conservan solo
+  los metadatos de la tabla; no hay historias clínicas ni permisos derivados del
+  reconocimiento facial.
 
-Todos los pasos siguientes se comprobaron el 2026-11-18 en ROS 2 Humble
-(Ubuntu 22.04, WSL2) con `/usr/bin/python3` y sin entorno virtual.
+`uvix_enroll_face_sim` simula la cámara: lee calidades por persona desde un
+JSON (`-p sim_muestras_file:=...`; `null` = rostro perdido; sin entrada =
+muestras buenas) con una muestra cada `sim_periodo_s`. Umbral de calidad 0.8,
+más de 3 rechazos → `RESULT_LOW_QUALITY`. La captura real queda para la
+integración con el componente de identificación.
 
-## Requisitos
+## 7. Requisitos
 
-- Django 5.2 y `ros2-django` (ver `requirements.txt`) instalados para el
-  `python3` del sistema. En el PC de desarrollo están en `~/.local` (`pip --user`).
-- `RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`. En este WSL, Fast DDS (el RMW por
-  defecto) no descubre nodos, ni siquiera los de `demo_nodes_py`.
+- Django 5.2 y `ros2-django` (`requirements.txt`) para el `python3` del sistema
+  (en el PC de desarrollo, `pip --user`).
+- `RMW_IMPLEMENTATION=rmw_cyclonedds_cpp` (en este WSL, Fast DDS no descubre nodos).
 
-## Base de datos
+## 8. Compilar, migrar y arrancar
 
-Ruta por defecto: `~/.local/share/uvix/uvix.sqlite3`. La variable
-`UVIX_DATA_DB` permite usar otra base, por ejemplo una temporal de prueba. El nodo
-escribe en el log la ruta efectiva al arrancar.
-
-## Compilar, migrar y arrancar
+Base por defecto: `~/.local/share/uvix/uvix.sqlite3`. `UVIX_DATA_DB` elige otra.
 
 ```bash
 source /opt/ros/humble/setup.bash
 cd ~/uvix_ws
 colcon build --packages-up-to uvix_data
 source install/setup.bash
-
-# Crear o actualizar el esquema (sirve desde cualquier carpeta)
 python3 -m django migrate --settings=uvix_data_project.settings
-
 ros2 run uvix_data uvix_data_node
 ```
 
-Si la base no existe o le faltan migraciones, el nodo no ofrece el servicio,
-lo indica en el log (`Ejecute 'python3 -m django migrate --settings=uvix_data_project.settings'`) y termina con
-código 1. Ctrl+C y SIGTERM lo cierran con código 0.
+Si la base no existe o le faltan migraciones, el nodo no ofrece servicios, lo
+indica en el log y termina con código 1. Ctrl+C y SIGTERM lo cierran con código 0.
 
-## Dar de alta una persona (datos ficticios)
+## 9. Demostración manual (comprobada, base temporal)
 
 ```bash
-python3 -m django shell --settings=uvix_data_project.settings -c \
-  "from people.models import Person; Person.objects.create(person_id='prueba_staff_01', display_name='Cuidadora Ficticia', role=2, active=True)"
+export ROS_DOMAIN_ID=80 UVIX_DATA_DB=/tmp/uvix_demo/uvix.sqlite3
+mkdir -p /tmp/uvix_demo && cd /tmp/uvix_demo
+python3 -m django migrate --settings=uvix_data_project.settings
+python3 -m django shell --settings=uvix_data_project.settings -c "
+from people.models import Person, PersonPreference
+juan = Person.objects.create(person_id='prueba_staff_juan', display_name='Juan Ficticio', role=2, active=True)
+Person.objects.create(person_id='prueba_admin_01', display_name='Admin Ficticio', role=3, active=True)
+PersonPreference.objects.create(person=juan, key='language', value='es')
+PersonPreference.objects.create(person=juan, key='form_of_address', value='usted')"
+cat > identidades.json <<'EOF'
+{"req-demo-1": {"person_id": "prueba_staff_juan", "status": 2, "ttl_s": 600},
+ "req-demo-2": {"person_id": "prueba_admin_01", "status": 2, "ttl_s": 600}}
+EOF
+
+# Cada uno en su terminal (mismo ROS_DOMAIN_ID y UVIX_DATA_DB):
+python3 ~/uvix_ws/src/uvix_data/test/identidad_ficticia.py identidades.json
+ros2 run uvix_data uvix_data_node
+ros2 run uvix_data uvix_enroll_face_sim
 ```
 
-Roles: 0 desconocido, 1 paciente, 2 personal, 3 administrador.
-
-## Consultar
-
 ```bash
-ros2 service call /uvix/get_person uvix_interfaces/srv/GetPerson "{person_id: prueba_staff_01}"
-# found=True, person=Person(person_id='prueba_staff_01', display_name='Cuidadora Ficticia', role=2, active=True, preferences=[])
+ros2 service call /uvix/get_person uvix_interfaces/srv/GetPerson "{person_id: prueba_staff_juan}"
+# found=True, person=Person(..., role=2, active=True, preferences=[KeyValue(key='form_of_address', value='usted'), KeyValue(key='language', value='es')])
+
+ros2 service call /uvix/check_permission uvix_interfaces/srv/CheckPermission "{request_id: req-demo-1, operation: deliver_item}"
+# allowed=True, code=0, evaluated_person_id='prueba_staff_juan', evaluated_role=2, identity_status=2
+
+ros2 service call /uvix/check_permission uvix_interfaces/srv/CheckPermission "{request_id: req-demo-1, operation: enroll_face}"
+# allowed=False, code=10, message='El rol Personal no tiene enroll_face'
+
+ros2 action send_goal /uvix/enroll_face uvix_interfaces/action/EnrollFace \
+  "{person_id: prueba_staff_juan, request_id: req-demo-2, consent_ref: consentimiento-ficticio-001}"
+# result_code: 0, enrolled: true, template_id: ftpl-..., samples_accepted: 5 -> SUCCEEDED
 ```
 
-## Pruebas
+## 10. Pruebas
 
-Ejecutar con el install cargado (`source install/setup.bash`) y con
-`RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`. Ninguna toca la base habitual.
+Con el install cargado y Cyclone DDS. Ninguna toca la base habitual.
 
 ```bash
-# Unitarias del callback (base de prueba de Django, en memoria)
+# Unitarias (48): GetPerson, preferencias, migración compatible, permisos, EnrollFace
+cd ~/uvix_ws/src/uvix_data
 UVIX_DATA_DB=/tmp/uvix_unit.sqlite3 python3 -m django test people --settings=uvix_data_project.settings
 
-# Extremo a extremo: ros2 run + cliente en ROS_DOMAIN_ID=77 sobre una base temporal
-python3 src/uvix_data/test/validar_get_person.py --domain 77
+# Extremo a extremo de GetPerson (13 casos): cierre, base sin migrar, error de base
+python3 ~/uvix_ws/src/uvix_data/test/validar_get_person.py --domain 77
 
-# Mediciones: RSS, CPU en reposo y latencia por tandas
-python3 src/uvix_data/test/medir_get_person.py --domain 77 --tandas 5 --llamadas 200 --reposo 30
+# Extremo a extremo de preferencias, CheckPermission y EnrollFace (24 casos)
+python3 ~/uvix_ws/src/uvix_data/test/validar_permisos.py --domain 79
+
+# Mediciones de GetPerson
+python3 ~/uvix_ws/src/uvix_data/test/medir_get_person.py --domain 77 --tandas 5 --llamadas 200 --reposo 30
 ```
 
-`validar_get_person.py` cubre los siguientes casos: persona activa, persona
-desactivada, persona inexistente, `preferences`, reinicio, cierre con
-SIGINT/SIGTERM, base sin migraciones y error de almacenamiento en marcha. Sale con
-código 0 solo si todos pasan.
+`validar_permisos.py` arranca en procesos separados el proveedor de identidad
+ficticio (`test/identidad_ficticia.py`), `uvix_data_node` y
+`uvix_enroll_face_sim` instalados, y los consulta con un cliente rclpy.
+Sale con código 0 solo si todos los casos pasan.

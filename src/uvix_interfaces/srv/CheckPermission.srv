@@ -1,0 +1,36 @@
+# srv/CheckPermission.srv
+# ¿Puede quien hizo la petición request_id solicitar esta operación?
+# Lo sirve uvix_data en /uvix/check_permission.
+#
+# La identidad NO viaja en la petición: el servicio la obtiene del componente
+# confiable (GetRequestIdentity) y lee role/active del registro local. Un role,
+# person_id o "verificado" declarado por el cliente no prueba nada.
+# Se evalúa SIEMPRE al solicitante, no al destinatario de la misión.
+string request_id          # petición a evaluar (vincula con IdentityVerification)
+string operation           # código de la operación (Capability.code, p. ej. "deliver_item")
+---
+# Rangos estables de code:
+#   0-9   permitido            (allowed = true)
+#   10-19 denegación válida    (allowed = false; se sabe que NO puede)
+#   20-29 sin decisión         (allowed = false; no se pudo consultar: nunca
+#                               se interpreta como permiso ni como denegación
+#                               definitiva -> RegisterMission CODE_INTERNAL_ERROR)
+uint16 CODE_ALLOWED=0
+uint16 CODE_ALLOWED_CANDIDATE_HELP=1   # excepción: attend_help_request con IDENTITY_CANDIDATE
+uint16 CODE_NOT_AUTHORIZED=10          # el rol no tiene esa operación
+uint16 CODE_UNKNOWN_OPERATION=11       # operación no registrada (incluso para ADMIN)
+uint16 CODE_IDENTITY_NOT_VERIFIED=12   # sin verificación, IDENTITY_UNKNOWN o CANDIDATE fuera de la excepción
+uint16 CODE_IDENTITY_EXPIRED=13        # verificación pasada de valid_until
+uint16 CODE_PERSON_NOT_FOUND=14        # identidad verificada que no está en el registro
+uint16 CODE_PERSON_INACTIVE=15         # persona desactivada: conserva registro, no autoriza
+uint16 CODE_INVALID_REQUEST=16         # request_id u operation vacíos
+uint16 CODE_IDENTITY_UNAVAILABLE=20    # GetRequestIdentity no responde
+uint16 CODE_STORAGE_UNAVAILABLE=21     # no se puede leer el registro local
+
+bool allowed
+uint16 code
+string operation                 # eco de la operación evaluada
+string evaluated_person_id       # solicitante evaluado (vacío si no hubo identidad)
+uint8 evaluated_role             # constantes ROLE_ de Person; ROLE_UNKNOWN si no se leyó
+uint8 identity_status            # constantes IDENTITY_ de IdentityVerification
+string message

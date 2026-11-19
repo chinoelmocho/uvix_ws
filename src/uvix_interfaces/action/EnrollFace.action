@@ -1,0 +1,41 @@
+# action/EnrollFace.action
+# Alta facial guiada de una persona ya registrada (/uvix/enroll_face).
+# Es una acción porque la captura tarda y puede cancelarse.
+# Ningún campo transporta imágenes ni vectores biométricos: la plantilla queda
+# en el almacenamiento interno y solo se devuelve su identificador.
+# Solo RESULT_ENROLLED crea una plantilla; cualquier otro resultado (incluida
+# la cancelación) termina sin alta confirmada.
+
+# Goal
+string person_id           # persona registrada y activa a la que se asocia el rostro
+string request_id          # petición del operador; se autoriza con CheckPermission("enroll_face")
+string consent_ref         # referencia al consentimiento registrado; obligatorio
+uint16 samples_required    # 0 = valor por defecto del servidor
+---
+# Result
+uint8 RESULT_ENROLLED=0          # alta confirmada; template_id válido
+uint8 RESULT_LOW_QUALITY=1       # demasiadas muestras por debajo del umbral de calidad
+uint8 RESULT_CANCELED=2          # cancelada por el cliente
+uint8 RESULT_INCOMPLETE=3        # rostro perdido o tiempo agotado antes de reunir las muestras
+uint8 RESULT_PERSON_NOT_FOUND=4
+uint8 RESULT_PERSON_INACTIVE=5
+uint8 RESULT_NO_CONSENT=6        # consent_ref vacío
+uint8 RESULT_NOT_AUTHORIZED=7    # CheckPermission lo denegó
+uint8 RESULT_UNAVAILABLE=8       # registro, cámara o CheckPermission no disponibles
+uint8 result_code
+bool enrolled                    # true solo con RESULT_ENROLLED
+string template_id               # vacío salvo RESULT_ENROLLED
+string model_version             # versión del modelo de rostros usada
+uint16 samples_accepted
+string detail
+---
+# Feedback
+uint8 STAGE_AUTHORIZING=0
+uint8 STAGE_WAITING_FACE=1
+uint8 STAGE_CAPTURING=2
+uint8 STAGE_SAVING=3
+uint8 stage
+uint16 samples_accepted
+uint16 samples_required
+float32 last_quality             # 0.0 a 1.0; calidad de la última muestra
+string instruction               # indicación para la persona ("mire a la cámara")

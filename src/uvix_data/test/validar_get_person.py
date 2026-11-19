@@ -233,8 +233,8 @@ def main():
                     resp is not None and not resp.found and resp.person.role == Person.ROLE_UNKNOWN)
 
         resp = llamar("prueba_staff_01")
-        v.registrar("preferences (contrato M1, sin almacenamiento aún)",
-                    "lista vacía (el modelo no guarda preferencias)",
+        v.registrar("preferences de una persona sin preferencias guardadas",
+                    "lista vacía (comportamiento genérico)",
                     f"{len(resp.person.preferences)} elementos" if resp else "sin respuesta",
                     resp is not None and len(resp.person.preferences) == 0)
 

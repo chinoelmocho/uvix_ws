@@ -19,6 +19,11 @@ install(PROGRAMS
   DESTINATION lib/${PROJECT_NAME}
   RENAME uvix_data_node
 )
+install(PROGRAMS
+  people/enroll_face_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME uvix_enroll_face_sim
+)
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights

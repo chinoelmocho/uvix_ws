@@ -844,6 +844,7 @@ power_manager:
 | `AckAlert.srv` | El personal confirma que atendió una alerta |
 | `GetPerson.srv` | Devuelve la `Person` (y su rol) de un `person_id` |
 | `GetRequestIdentity.srv` | Devuelve la `IdentityVerification` de un `request_id` |
+| `CheckPermission.srv` | ¿Puede quien hizo `request_id` solicitar esta operación? Identidad del proveedor confiable, rol del registro (ver `uvix_data/README.md`) |
 
 ### Acciones (`action/`)
 
@@ -851,6 +852,7 @@ power_manager:
 |---|---|
 | `ExecuteMission.action` | Ejecuta una misión registrada, con feedback de progreso |
 | `SpeakText.action` | Hace hablar al robot (TTS), cancelable |
+| `EnrollFace.action` | Alta facial guiada; cancelable; contempla calidad insuficiente y registro incompleto. No transporta biometría |
 
 ### Topics, servicios y acciones
 
@@ -864,6 +866,8 @@ power_manager:
 | `/uvix/ack_alert` | `AckAlert` (srv) | `mission_manager` |
 | `/uvix/get_person` | `GetPerson` (srv) | Registro de personas |
 | `/uvix/get_request_identity` | `GetRequestIdentity` (srv) | Componente de identificación |
+| `/uvix/check_permission` | `CheckPermission` (srv) | Registro de personas (`uvix_data`) |
+| `/uvix/enroll_face` | `EnrollFace` (action) | Componente de identificación (en M1, `uvix_enroll_face_sim`) |
 | `/uvix/execute_mission` | `ExecuteMission` (action) | Ejecutor de misiones |
 | `/uvix/mission_status` | `MissionStatus` | `mission_manager` |
 | `/uvix/robot_activity` | `RobotActivity` | Ejecutor de misiones |
